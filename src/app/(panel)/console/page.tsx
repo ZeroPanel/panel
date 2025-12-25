@@ -1,9 +1,5 @@
-import { TerminalView } from "@/components/console/terminal-view";
+import { redirect } from 'next/navigation';
 
 export default function ConsolePage() {
-  return (
-    <div>
-      <TerminalView />
-    </div>
-  );
+  redirect('/dashboard');
 }

@@ -1,9 +1,5 @@
-import { SettingsForm } from "@/components/settings/settings-form";
+import { redirect } from 'next/navigation';
 
 export default function SettingsPage() {
-  return (
-    <div>
-      <SettingsForm />
-    </div>
-  );
+  redirect('/dashboard');
 }

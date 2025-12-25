@@ -1,23 +1,32 @@
 import { Sidebar, SidebarHeader, SidebarContent, SidebarFooter } from "@/components/ui/sidebar";
-import { Rocket } from "lucide-react";
+import { Gauge, LogOut } from "lucide-react";
 import { NavMenu } from "./nav-menu";
+import { Button } from "../ui/button";
 
 export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex items-center gap-2 p-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-             <Rocket className="size-5" />
+        <div className="flex items-center gap-3 p-2">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-green-500/20 text-green-400">
+             <Gauge className="size-5" />
           </div>
-          <span className="text-lg font-semibold">Nebula Panel</span>
+          <div>
+            <p className="text-lg font-semibold">Admin Panel</p>
+            <p className="text-xs text-muted-foreground">v2.4.0</p>
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMenu />
       </SidebarContent>
       <SidebarFooter>
-        {/* Can add user profile or other items here later */}
+        <div className="p-2">
+          <Button variant="ghost" className="w-full justify-start">
+            <LogOut className="mr-2 size-4" />
+            Log Out
+          </Button>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );

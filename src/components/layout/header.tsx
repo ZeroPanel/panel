@@ -8,10 +8,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Bell, ChevronsUpDown, Server as ServerIcon } from "lucide-react";
+import { Bell, Search } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ThemeToggle } from "../theme-toggle";
 import placeholderImages from "@/lib/placeholder-images.json";
+import { Input } from "../ui/input";
 
 export function Header() {
   const userAvatar = placeholderImages.placeholderImages.find(p => p.id === 'user-avatar');
@@ -21,44 +21,31 @@ export function Header() {
       <div className="md:hidden">
         <SidebarTrigger />
       </div>
+      
+      <div className="flex items-center gap-2 font-semibold text-lg">
+        Dashboard
+      </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full max-w-xs justify-between">
-            <div className="flex items-center gap-2">
-              <ServerIcon className="size-4 text-muted-foreground" />
-              <span className="truncate">Web Server (Primary)</span>
-            </div>
-            <ChevronsUpDown className="size-4 text-muted-foreground" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-full max-w-xs">
-          <DropdownMenuLabel>Select a Server</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem>Web Server (Primary)</DropdownMenuItem>
-          <DropdownMenuItem>Database Server</DropdownMenuItem>
-          <DropdownMenuItem>Worker-01</DropdownMenuItem>
-          <DropdownMenuItem>Staging Environment</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <div className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="icon">
+      <div className="ml-auto flex items-center gap-4">
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search servers, nodes..." className="pl-9" />
+        </div>
+        <Button variant="ghost" size="icon" className="rounded-full">
           <Bell className="size-5" />
           <span className="sr-only">Notifications</span>
         </Button>
-        <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="h-8 w-8">
-                {userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="User Avatar" data-ai-hint={userAvatar.imageHint} />}
-                <AvatarFallback>U</AvatarFallback>
+            <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+              <Avatar className="h-9 w-9">
+                {userAvatar && <AvatarImage src={userAvatar.imageUrl} alt="Jane Admin" data-ai-hint={userAvatar.imageHint} />}
+                <AvatarFallback>JA</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuLabel>Jane Admin</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuItem>Support</DropdownMenuItem>

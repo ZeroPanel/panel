@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Nebula Panel',
-  description: 'A Pterodactyl-inspired server management control panel.',
+  title: 'Admin Panel',
+  description: 'A modern admin panel dashboard.',
 };
 
 export default function RootLayout({

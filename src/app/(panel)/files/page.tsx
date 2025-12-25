@@ -1,9 +1,5 @@
-import { FileExplorer } from "@/components/files/file-explorer";
+import { redirect } from 'next/navigation';
 
 export default function FilesPage() {
-  return (
-    <div>
-      <FileExplorer />
-    </div>
-  );
+  redirect('/dashboard');
 }

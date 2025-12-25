@@ -1,9 +1,5 @@
-import { AdminForm } from "@/components/admin/admin-form";
+import { redirect } from 'next/navigation';
 
 export default function AdminPage() {
-  return (
-    <div>
-      <AdminForm />
-    </div>
-  );
+  redirect('/dashboard');
 }

@@ -19,3 +19,10 @@ export interface FileNode {
   size?: string;
   modified: string;
 }
+
+export type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  tooltip: string;
+};
