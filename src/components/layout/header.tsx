@@ -17,17 +17,17 @@ export function Header() {
   const userAvatar = placeholderImages.placeholderImages.find(p => p.id === 'user-avatar-2');
 
   return (
-    <header className="flex items-center justify-between border-b border-surface-dark bg-background-dark/95 backdrop-blur-sm px-6 py-3 z-10 shrink-0">
-      <div className="flex items-center gap-6">
-        <div className="md:hidden">
+    <header className="flex items-center justify-between border-b border-surface-dark bg-background/95 backdrop-blur-sm px-4 sm:px-6 py-3 z-10 shrink-0">
+      <div className="flex items-center gap-4">
+        <div className="lg:hidden">
           <SidebarTrigger />
         </div>
-        <div className="flex items-center gap-3 text-white">
+        <div className="hidden sm:flex items-center gap-3 text-white">
           <Grid className="text-primary" />
           <h2 className="text-lg font-bold leading-tight tracking-tight">Dashboard</h2>
         </div>
         
-        <div className="hidden md:flex relative group">
+        <div className="hidden lg:flex relative group">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <Search className="text-muted-foreground text-[20px]" />
           </div>
@@ -35,8 +35,8 @@ export function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="icon" className="flex items-center justify-center size-9 rounded-lg hover:bg-surface-dark text-text-secondary hover:text-white transition-colors relative">
                 <Bell className="text-[20px]" />
                 <span className="absolute top-2 right-2 size-2 bg-primary rounded-full border-2 border-background-dark"></span>

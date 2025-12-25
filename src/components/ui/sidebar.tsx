@@ -181,7 +181,7 @@ const Sidebar = React.forwardRef<
       return (
         <div
           className={cn(
-            "flex h-full w-64 flex-col border-r border-surface-dark bg-background-dark transition-all duration-300 ease-in-out md:flex flex-shrink-0",
+            "flex h-full w-64 flex-col border-r border-surface-dark bg-background transition-all duration-300 ease-in-out md:flex flex-shrink-0",
             className
           )}
           ref={ref}
@@ -197,7 +197,7 @@ const Sidebar = React.forwardRef<
         <Sheet open={openMobile} onOpenChange={setOpenMobile}>
           <SheetContent
             side={side}
-            className={cn("w-64 bg-background-dark p-0 text-white", className)}
+            className={cn("w-64 bg-background p-0 text-white", className)}
             {...props}
           >
             {children}
@@ -209,7 +209,7 @@ const Sidebar = React.forwardRef<
     return (
       <aside
         ref={ref}
-        className={cn("w-64 flex-col border-r border-surface-dark bg-background-dark transition-all duration-300 ease-in-out hidden md:flex flex-shrink-0",
+        className={cn("w-64 flex-col border-r border-surface-dark bg-background transition-all duration-300 ease-in-out hidden lg:flex flex-shrink-0",
           state === 'collapsed' && 'w-[5rem]',
           className
         )}
