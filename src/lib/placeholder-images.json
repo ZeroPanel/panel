@@ -5,6 +5,12 @@
       "description": "User avatar for header",
       "imageUrl": "https://images.unsplash.com/photo-1580489944761-15a19d654956?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=Mnw3NDE5ODJ8MHwxfHNlYXJjaHwxfHxmZW1hbGUlMjBwb3J0cmFpdHxlbnwwfHx8fDE2NzM2NzYxMDU&ixlib=rb-4.0.3&q=80&w=1080",
       "imageHint": "woman portrait"
+    },
+    {
+      "id": "user-avatar-2",
+      "description": "Portrait of a female administrator",
+      "imageUrl": "https://lh3.googleusercontent.com/aida-public/AB6AXuBFqs8x02h4bqjqFITqvQ6oe95Wc64U0tP8JdAhfpBlMLqPFsM7lHKNkKZsTnlDhQYo0rc5fgPL6juqwJI43y5Ym0n_l9aOsUvWRin9EzsYe3KQ7hTyl_GUCWxvzWHUPcgp9p4NpAaDWVJ0eA3lkZfsh-VmTrYO9azJs140aEo5EPoMfxUS0QUyVbem5z-zUENIQCQb8v9eL28NRrmbBx5b0NeaSCHvlLVxZwcwFJo7rqodG7jmoRcvBUBOr_O03tBB7on1U8uKteQ",
+      "imageHint": "woman portrait"
     }
   ]
 }
