@@ -4,14 +4,16 @@ import { Header } from "@/components/layout/header";
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-            <Header />
-            <main className="p-4 sm:p-6 lg:p-8">
-                {children}
-            </main>
-        </SidebarInset>
-    </SidebarProvider>
+    <div className="flex h-screen w-full bg-background-dark">
+      <SidebarProvider>
+          <AppSidebar />
+          <div className="flex flex-1 flex-col h-full overflow-hidden relative">
+              <Header />
+              <main className="flex-1 overflow-y-auto p-4 md:p-8">
+                  {children}
+              </main>
+          </div>
+      </SidebarProvider>
+    </div>
   );
 }

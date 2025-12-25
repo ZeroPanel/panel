@@ -2,42 +2,48 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { SidebarMenu, SidebarMenuItem, SidebarMenuButton } from "@/components/ui/sidebar";
-import { LayoutGrid, Server, SquareStack, Users, Network, Settings } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  LayoutGrid,
+  Server,
+  Package,
+  Users,
+  Network,
+  Settings,
+} from "lucide-react";
 
 const menuItems = [
-  { href: "/dashboard", label: "Overview", icon: LayoutGrid, tooltip: "Overview" },
-  { href: "/nodes", label: "Nodes", icon: Server, tooltip: "Nodes" },
-  { href: "/containers", label: "Containers", icon: SquareStack, tooltip: "Containers" },
-  { href: "/users", label: "Users", icon: Users, tooltip: "Users" },
-  { href: "/network", label: "Network", icon: Network, tooltip: "Network" },
-  { href: "/settings", label: "Settings", icon: Settings, tooltip: "Settings" },
+  { href: "/dashboard", label: "Overview", icon: LayoutGrid },
+  { href: "/nodes", label: "Nodes", icon: Server },
+  { href: "/containers", label: "Containers", icon: Package },
+  { href: "/users", label: "Users", icon: Users },
+  { href: "/network", label: "Network", icon: Network },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function NavMenu() {
   const pathname = usePathname();
 
   return (
-    <SidebarMenu>
-      {menuItems.map((item) => (
-        <SidebarMenuItem key={item.href}>
-          <SidebarMenuButton
-            asChild
-            isActive={pathname.startsWith(item.href)}
-            variant={pathname.startsWith(item.href) ? "default" : "ghost"}
-            className={`${
-              pathname.startsWith(item.href)
-                ? 'bg-primary/10 text-primary-foreground font-medium'
-                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
-            }`}
+    <nav className="flex flex-col gap-2">
+      {menuItems.map((item) => {
+        const isActive = pathname.startsWith(item.href);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
+              isActive
+                ? "bg-surface-dark text-white"
+                : "text-text-secondary hover:bg-surface-dark/50 hover:text-white"
+            )}
           >
-            <Link href={item.href}>
-              <item.icon />
-              <span>{item.label}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ))}
-    </SidebarMenu>
+            <item.icon className={cn("size-5", isActive && "text-primary")} />
+            <p className="text-sm font-medium leading-normal">{item.label}</p>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
