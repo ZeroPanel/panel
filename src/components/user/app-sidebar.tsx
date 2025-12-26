@@ -13,7 +13,6 @@ import { Button } from "../ui/button";
 import Image from "next/image";
   
 const menuItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
     { href: "/my-servers", label: "My Servers", icon: Server },
     { href: "/console", label: "Console", icon: Terminal },
     { href: "/billing", label: "Billing", icon: CreditCard },
@@ -38,7 +37,7 @@ export function UserAppSidebar() {
                 <nav className="flex flex-col gap-2 flex-1">
                     {menuItems.map((item) => (
                         <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${
-                            item.label === 'My Servers'
+                            item.label === 'My Servers' // This logic needs to be updated if another page is active
                               ? 'bg-card-dark text-white shadow-sm ring-1 ring-white/5'
                               : 'text-text-secondary hover:bg-card-dark hover:text-white'
                           }`}>

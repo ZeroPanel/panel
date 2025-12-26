@@ -1,5 +1,7 @@
-import { redirect } from 'next/navigation';
+'use client';
+
+import { SettingsForm } from "@/components/settings/settings-form";
 
 export default function SettingsPage() {
-  redirect('/dashboard');
+    return <SettingsForm />;
 }

@@ -1,14 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-export default function FilesPage() {
+export default function ContainersPage() {
   return (
     <div>
       <Card>
         <CardHeader>
-          <CardTitle>Files</CardTitle>
+          <CardTitle>Containers</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">Files page is under construction.</p>
+          <p className="text-muted-foreground">Containers page is under construction.</p>
         </CardContent>
       </Card>
     </div>
