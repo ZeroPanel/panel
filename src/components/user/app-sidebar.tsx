@@ -1,5 +1,4 @@
 import {
-    LayoutGrid,
     Server,
     CreditCard,
     LifeBuoy,
