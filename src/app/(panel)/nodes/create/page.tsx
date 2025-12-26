@@ -64,8 +64,9 @@ export default function CreateNodePage() {
 
     try {
       const newWs = new WebSocket(`wss://${domain}`);
-      
-      newWs.onopen = () => {
+      setWs(newWs);
+
+      const openHandler = () => {
         setConnectionStatus('Connected');
         const payload = {
           website: window.location.hostname,
@@ -74,22 +75,29 @@ export default function CreateNodePage() {
         newWs.send(JSON.stringify(payload));
       };
 
-      newWs.onmessage = (event) => {
+      const messageHandler = (event: MessageEvent) => {
         console.log('WebSocket message received:', event.data);
       };
 
-      newWs.onclose = () => {
+      const closeHandler = () => {
         setConnectionStatus('Disconnected');
+        newWs.removeEventListener('open', openHandler);
+        newWs.removeEventListener('message', messageHandler);
+        newWs.removeEventListener('close', closeHandler);
+        newWs.removeEventListener('error', errorHandler);
       };
-
-      newWs.onerror = (error) => {
+      
+      const errorHandler = (error: Event) => {
         console.error('WebSocket Error:', error);
         setConnectionStatus('Error');
-        // clean up the failed connection
         newWs.close();
       };
+      
+      newWs.addEventListener('open', openHandler);
+      newWs.addEventListener('message', messageHandler);
+      newWs.addEventListener('close', closeHandler);
+      newWs.addEventListener('error', errorHandler);
 
-      setWs(newWs);
     } catch (e) {
       setConnectionStatus('Error');
     }
@@ -100,13 +108,16 @@ export default function CreateNodePage() {
     const handler = setTimeout(() => {
       if (fqdn) {
         connectWebSocket(fqdn);
+      } else {
+        if(ws) ws.close();
+        setConnectionStatus('Disconnected');
       }
     }, 1000); // 1-second debounce
 
     return () => {
       clearTimeout(handler);
     };
-  }, [fqdn, connectWebSocket]);
+  }, [fqdn, connectWebSocket, ws]);
 
   useEffect(() => {
     // Cleanup on component unmount
