@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -31,15 +32,98 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Fingerprint,
   HardDrive,
-  MemoryStick,
+  HelpCircle,
   Network,
   Plus,
   Settings2,
   Share,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import Link from 'next/link';
+import { cn } from '@/lib/utils';
+
+type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 
 export default function CreateNodePage() {
+  const [fqdn, setFqdn] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('Disconnected');
+  const [ws, setWs] = useState<WebSocket | null>(null);
+
+  const connectWebSocket = useCallback((domain: string) => {
+    if (ws) {
+      ws.close();
+    }
+
+    if (!domain) {
+      setConnectionStatus('Disconnected');
+      return;
+    }
+
+    setConnectionStatus('Connecting');
+
+    try {
+      const newWs = new WebSocket(`wss://${domain}`);
+      
+      newWs.onopen = () => {
+        setConnectionStatus('Connected');
+        const payload = {
+          website: window.location.hostname,
+          dummyKey: 'a1b2-c3d4-e5f6-g7h8',
+        };
+        newWs.send(JSON.stringify(payload));
+      };
+
+      newWs.onmessage = (event) => {
+        console.log('WebSocket message received:', event.data);
+      };
+
+      newWs.onclose = () => {
+        setConnectionStatus('Disconnected');
+      };
+
+      newWs.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        setConnectionStatus('Error');
+        // clean up the failed connection
+        newWs.close();
+      };
+
+      setWs(newWs);
+    } catch (e) {
+      setConnectionStatus('Error');
+    }
+  }, [ws]);
+
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (fqdn) {
+        connectWebSocket(fqdn);
+      }
+    }, 1000); // 1-second debounce
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [fqdn, connectWebSocket]);
+
+  useEffect(() => {
+    // Cleanup on component unmount
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [ws]);
+  
+  const statusConfig: Record<ConnectionStatus, { icon: React.ReactNode; text: string; color: string }> = {
+    'Disconnected': { icon: <WifiOff size={16} />, text: 'No Connection', color: 'text-text-secondary' },
+    'Connecting': { icon: <HelpCircle size={16} className="animate-pulse" />, text: 'Connecting...', color: 'text-amber-400' },
+    'Connected': { icon: <Wifi size={16} />, text: 'Connected', color: 'text-emerald-400' },
+    'Error': { icon: <WifiOff size={16} />, text: 'Connection Failed', color: 'text-rose-400' },
+  };
+
   return (
     <div className="max-w-7xl mx-auto flex flex-col gap-8">
       <div>
@@ -126,16 +210,22 @@ export default function CreateNodePage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center gap-3">
-              <Settings2 className="text-primary size-6" />
-              <CardTitle>Configuration</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <Settings2 className="text-primary size-6" />
+                    <CardTitle>Configuration</CardTitle>
+                </div>
+                <div className={cn("flex items-center gap-2 text-xs font-medium", statusConfig[connectionStatus].color)}>
+                  {statusConfig[connectionStatus].icon}
+                  {statusConfig[connectionStatus].text}
+                </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="fqdn">Fully Qualified Domain Name</Label>
                 <div className="relative">
                    <Network className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={20} />
-                   <Input id="fqdn" placeholder="node.example.com" className="pl-10"/>
+                   <Input id="fqdn" placeholder="node.example.com" className="pl-10" value={fqdn} onChange={(e) => setFqdn(e.target.value)} />
                 </div>
                 <p className="text-sm text-text-secondary">
                   Enter the domain name used to connect to the daemon. An IP
