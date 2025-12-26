@@ -16,7 +16,7 @@ const menuItems = [
     { href: "/console", label: "Console", icon: Terminal },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/support", label: "Support", icon: LifeBuoy },
-    { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/user-settings", label: "Settings", icon: Settings },
 ];
 
 export function UserAppSidebar() {
