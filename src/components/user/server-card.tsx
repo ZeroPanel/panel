@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from "@/components/ui/button";
-import { Play, RefreshCw, Stop, Terminal } from "lucide-react";
+import { Play, RefreshCw, StopCircle, Terminal } from "lucide-react";
 import Image from "next/image";
 
 type ServerStatus = "Running" | "Stopped" | "Building";
@@ -111,7 +111,7 @@ export function UserServerCard({ server }: { server: Server }) {
                         <Play size={20} className="fill-current"/>
                     </Button>
                     <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-rose-400 hover:text-rose-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Stop" disabled={server.status === 'Stopped'}>
-                        <Stop size={20} className="fill-current"/>
+                        <StopCircle size={20} className="fill-current"/>
                     </Button>
                     <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Restart" disabled={server.status === 'Stopped'}>
                         <RefreshCw size={20} />
