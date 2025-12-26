@@ -8,10 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Bell, Grid, MessageSquare, Search } from "lucide-react";
+import { Bell, Grid, MessageSquare, Search, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import placeholderImages from "@/lib/placeholder-images.json";
 import { Input } from "../ui/input";
+import Link from "next/link";
 
 export function Header() {
   const userAvatar = placeholderImages.placeholderImages.find(p => p.id === 'user-avatar-2');
@@ -36,6 +37,12 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        <Button asChild variant="outline" size="sm">
+            <Link href="/my-servers">
+                <User className="mr-2 h-4 w-4" />
+                User View
+            </Link>
+        </Button>
         <div className="flex items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="icon" className="flex items-center justify-center size-9 rounded-lg hover:bg-surface-dark text-text-secondary hover:text-white transition-colors relative">
                 <Bell className="text-[20px]" />
