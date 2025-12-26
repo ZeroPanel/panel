@@ -169,8 +169,10 @@ export default function NodesPage() {
               Manage and monitor your server fleet
             </p>
           </div>
-          <Button>
-            <Plus size={20} className="mr-2" /> Create New Node
+          <Button asChild>
+            <Link href="/nodes/create">
+              <Plus size={20} className="mr-2" /> Create New Node
+            </Link>
           </Button>
         </div>
       </div>
