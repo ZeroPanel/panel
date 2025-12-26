@@ -19,7 +19,7 @@ const menuItems = [
   { href: "/containers", label: "Containers", icon: Package },
   { href: "/users", label: "Users", icon: Users },
   { href: "/network", label: "Network", icon: Network },
-  { href: "/console", label: "Console", icon: Terminal },
+  { href: "/admin-console", label: "Console", icon: Terminal },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

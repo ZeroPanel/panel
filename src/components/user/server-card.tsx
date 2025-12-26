@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Play, RefreshCw, StopCircle, Terminal } from "lucide-react";
 import Image from "next/image";
+import Link from 'next/link';
 
 type ServerStatus = "Running" | "Stopped" | "Building";
 
@@ -117,9 +118,11 @@ export function UserServerCard({ server }: { server: Server }) {
                         <RefreshCw size={20} />
                     </Button>
                 </div>
-                <Button variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={server.status === 'Stopped'}>
-                    <Terminal size={16} />
-                    Console
+                <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={server.status === 'Stopped'}>
+                    <Link href="/console">
+                      <Terminal size={16} />
+                      Console
+                    </Link>
                 </Button>
             </div>
         </div>
