@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 
@@ -67,7 +66,7 @@ const levelStyles = {
   SERVER: 'text-purple-400',
 };
 
-const ConsolePage = () => {
+const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [logs, setLogs] = useState(initialLogs);
   const [command, setCommand] = useState('');
   const [filter, setFilter] = useState('All');
@@ -109,6 +108,10 @@ const ConsolePage = () => {
               <BreadcrumbSeparator />
               <BreadcrumbItem>
                 <BreadcrumbPage>Minecraft SMP</BreadcrumbPage>
+              </BreadcrumbItem>
+               <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Console</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>

@@ -10,7 +10,6 @@ import {
   Users,
   Network,
   Settings,
-  Terminal,
   File,
   Shield,
 } from "lucide-react";
@@ -21,7 +20,6 @@ const menuItems = [
   { href: "/containers", label: "Containers", icon: Package },
   { href: "/users", label: "Users", icon: Users },
   { href: "/network", label: "Network", icon: Network },
-  { href: "/admin-console", label: "Console", icon: Terminal },
   { href: "/files", label: "Files", icon: File },
   { href: "/admin", label: "Admin", icon: Shield },
   { href: "/settings", label: "Settings", icon: Settings },

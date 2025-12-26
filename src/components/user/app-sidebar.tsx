@@ -4,7 +4,6 @@ import {
     LifeBuoy,
     Settings,
     LogOut,
-    Terminal,
   } from "lucide-react";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -13,7 +12,6 @@ import Image from "next/image";
   
 const menuItems = [
     { href: "/my-servers", label: "My Servers", icon: Server },
-    { href: "/console", label: "Console", icon: Terminal },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/support", label: "Support", icon: LifeBuoy },
     { href: "/user-settings", label: "Settings", icon: Settings },

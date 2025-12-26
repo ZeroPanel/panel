@@ -119,7 +119,7 @@ export function UserServerCard({ server }: { server: Server }) {
                     </Button>
                 </div>
                 <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={server.status === 'Stopped'}>
-                    <Link href="/console">
+                    <Link href={`/server/${server.name.toLowerCase().replace(' ', '-')}/console`}>
                       <Terminal size={16} />
                       Console
                     </Link>
