@@ -19,7 +19,14 @@ type AdminFormValues = {
   backend: BackendType;
   enabled: boolean;
   config: {
-    firebase: { projectId: string; apiKey: string };
+    firebase: {
+      projectId: string;
+      apiKey: string;
+      authDomain: string;
+      storageBucket: string;
+      messagingSenderId: string;
+      appId: string;
+    };
     supabase: { projectUrl: string; anonKey: string };
     rest: { apiUrl: string; authToken: string };
   };
@@ -29,7 +36,14 @@ const defaultValues: AdminFormValues = {
   backend: "none",
   enabled: false,
   config: {
-    firebase: { projectId: "", apiKey: "" },
+    firebase: {
+      projectId: "",
+      apiKey: "",
+      authDomain: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: "",
+    },
     supabase: { projectUrl: "", anonKey: "" },
     rest: { apiUrl: "", authToken: "" },
   },
@@ -52,7 +66,7 @@ const databaseOptions: { id: BackendType; name: string; logo: React.ReactNode; }
       id: "supabase",
       name: "Supabase",
       logo: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="#3ecf8e" d="M12.28.32a.49.49 0 0 0-.56 0L.32 7.55a.48.48 0 0 0-.25.35c-.03.1-.03.22.02.32L4.03 21.7a.48.48 0 0 0 .44.3h15.06a.48.48.0 0 0 .44-.3l3.94-13.48c.05-.1.05-.22.02-.32a.48.48 0 0 0-.25-.35L12.28.32Zm.46 15.65c-2.9 1.44-6.33-1.07-6.33-4.32c0-3.25 3.52-6.04 6.43-4.5s2.7 5.95-2.22 8.82Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="#3ecf8e" d="M12.28.32a.49.49 0 0 0-.56 0L.32 7.55a.48.48 0 0 0-.25.35c-.03.1-.03.22.02.32L4.03 21.7a.48.48 0 0 0 .44.3h15.06a.48.48 0 0 0 .44-.3l3.94-13.48c.05-.1.05-.22.02-.32a.48.48 0 0 0-.25-.35L12.28.32Zm.46 15.65c-2.9 1.44-6.33-1.07-6.33-4.32c0-3.25 3.52-6.04 6.43-4.5s2.7 5.95-2.22 8.82Z"/></svg>
       ),
     },
     {
@@ -139,6 +153,22 @@ export function AdminForm() {
                 <div className="space-y-2">
                   <Label>API Key</Label>
                   <Controller name="config.firebase.apiKey" control={control} render={({ field }) => <Input type="password" {...field} placeholder="your-firebase-api-key" />} />
+                </div>
+                 <div className="space-y-2">
+                  <Label>Auth Domain</Label>
+                  <Controller name="config.firebase.authDomain" control={control} render={({ field }) => <Input {...field} placeholder="your-project.firebaseapp.com" />} />
+                </div>
+                 <div className="space-y-2">
+                  <Label>Storage Bucket</Label>
+                  <Controller name="config.firebase.storageBucket" control={control} render={({ field }) => <Input {...field} placeholder="your-project.appspot.com" />} />
+                </div>
+                 <div className="space-y-2">
+                  <Label>Messaging Sender ID</Label>
+                  <Controller name="config.firebase.messagingSenderId" control={control} render={({ field }) => <Input {...field} placeholder="123456789012" />} />
+                </div>
+                 <div className="space-y-2">
+                  <Label>App ID</Label>
+                  <Controller name="config.firebase.appId" control={control} render={({ field }) => <Input {...field} placeholder="1:12345:web:67890" />} />
                 </div>
               </CardContent>
             </Card>
