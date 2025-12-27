@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -48,86 +48,80 @@ type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 export default function CreateNodePage() {
   const [fqdn, setFqdn] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('Disconnected');
-  const [ws, setWs] = useState<WebSocket | null>(null);
-
-  const connectWebSocket = useCallback((domain: string) => {
-    if (ws) {
-      ws.close();
-    }
-
-    if (!domain) {
-      setConnectionStatus('Disconnected');
-      return;
-    }
-
-    setConnectionStatus('Connecting');
-
-    try {
-      const newWs = new WebSocket(`wss://${domain}`);
-      setWs(newWs);
-
-      const openHandler = () => {
-        setConnectionStatus('Connected');
-        const payload = {
-          website: window.location.hostname,
-          dummyKey: 'a1b2-c3d4-e5f6-g7h8',
-        };
-        newWs.send(JSON.stringify(payload));
-      };
-
-      const messageHandler = (event: MessageEvent) => {
-        console.log('WebSocket message received:', event.data);
-      };
-
-      const closeHandler = () => {
-        setConnectionStatus('Disconnected');
-        newWs.removeEventListener('open', openHandler);
-        newWs.removeEventListener('message', messageHandler);
-        newWs.removeEventListener('close', closeHandler);
-        newWs.removeEventListener('error', errorHandler);
-      };
-      
-      const errorHandler = (error: Event) => {
-        console.error('WebSocket Error:', error);
-        setConnectionStatus('Error');
-        newWs.close();
-      };
-      
-      newWs.addEventListener('open', openHandler);
-      newWs.addEventListener('message', messageHandler);
-      newWs.addEventListener('close', closeHandler);
-      newWs.addEventListener('error', errorHandler);
-
-    } catch (e) {
-      console.error("Failed to create WebSocket:", e);
-      setConnectionStatus('Error');
-    }
-  }, [ws]);
-
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      if (fqdn) {
-        connectWebSocket(fqdn);
-      } else {
-        if(ws) ws.close();
-        setConnectionStatus('Disconnected');
+      // Clear previous connection if it exists
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
+
+      if (!fqdn) {
+        setConnectionStatus('Disconnected');
+        return;
+      }
+
+      setConnectionStatus('Connecting');
+
+      try {
+        const newWs = new WebSocket(`wss://${fqdn}`);
+        wsRef.current = newWs;
+
+        const openHandler = () => {
+          setConnectionStatus('Connected');
+          const payload = {
+            website: window.location.hostname,
+            dummyKey: 'a1b2-c3d4-e5f6-g7h8',
+          };
+          newWs.send(JSON.stringify(payload));
+        };
+
+        const messageHandler = (event: MessageEvent) => {
+          console.log('WebSocket message received:', event.data);
+        };
+
+        const closeHandler = () => {
+          // Only update status if this is still the active WebSocket instance
+          if (wsRef.current === newWs) {
+            setConnectionStatus('Disconnected');
+          }
+        };
+        
+        const errorHandler = (error: Event) => {
+          console.error('WebSocket Error:', error);
+          if (wsRef.current === newWs) {
+            setConnectionStatus('Error');
+          }
+          newWs.close();
+        };
+        
+        newWs.addEventListener('open', openHandler);
+        newWs.addEventListener('message', messageHandler);
+        newWs.addEventListener('close', closeHandler);
+        newWs.addEventListener('error', errorHandler);
+
+      } catch (e) {
+        console.error("Failed to create WebSocket:", e);
+        setConnectionStatus('Error');
+      }
+
     }, 1000); // 1-second debounce
 
     return () => {
       clearTimeout(handler);
     };
-  }, [fqdn, connectWebSocket, ws]);
+  }, [fqdn]);
 
   useEffect(() => {
     // Cleanup on component unmount
     return () => {
-      if (ws) {
-        ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
       }
     };
-  }, [ws]);
+  }, []);
   
   const statusConfig: Record<ConnectionStatus, { icon: React.ReactNode; text: string; color: string }> = {
     'Disconnected': { icon: <WifiOff size={16} />, text: 'No Connection', color: 'text-text-secondary' },
