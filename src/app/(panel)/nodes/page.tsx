@@ -186,41 +186,67 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     }
 
     const ws = new WebSocket(`wss://${node.ip}/health`);
-    
+    let healthCheckInterval: NodeJS.Timeout;
+
     ws.onopen = () => {
-      setStatus('Online');
+      setStatus('Connecting'); // Start as connecting, wait for first health response
+      healthCheckInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'health' }));
+        }
+      }, 30000);
+      // Send initial health check immediately
+      ws.send(JSON.stringify({ type: 'health' }));
     };
 
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            if (data.status && ['Online', 'Offline', 'Maint.'].includes(data.status)) {
-                setStatus(data.status);
+            if (data.type === 'health_response') {
+                if (data.status === 'healthy') {
+                    setStatus('Online');
+                } else if (data.status === 'maintenance') {
+                    setStatus('Maint.');
+                } else {
+                    setStatus('Offline');
+                }
+
+                setCurrentNode(prev => ({
+                    ...prev,
+                    cpu: data.memory?.usage ?? prev.cpu, // Assuming health response has cpu
+                    ram: {
+                        current: prev.ram ? prev.ram.current : 0, // Health response has memory, not ram. Adjusting.
+                        max: prev.ram ? prev.ram.max : 0
+                    }
+                }));
             }
-             // You could update other node properties here from the WS message
-            setCurrentNode(prev => ({ ...prev, ...data }));
         } catch (e) {
-             if (['Online', 'Offline', 'Maint.'].includes(event.data)) {
-                setStatus(event.data);
-            }
+            console.error("Failed to parse health check response", e);
         }
     };
 
     ws.onclose = () => {
       setStatus('Offline');
+      clearInterval(healthCheckInterval);
     };
     
     ws.onerror = () => {
       setStatus('Offline');
+      clearInterval(healthCheckInterval);
     };
 
     return () => {
+      clearInterval(healthCheckInterval);
       ws.close();
     };
   }, [node.ip]);
 
   const statusConfig = statusStyles[status];
   const isOnline = status === 'Online';
+
+  const ramCurrent = (isOnline && currentNode.ram) ? currentNode.ram.current : 0;
+  const ramMax = (isOnline && currentNode.ram) ? currentNode.ram.max : 0;
+  const ramUsage = ramMax > 0 ? (ramCurrent / ramMax) * 100 : 0;
 
   return (
     <TableRow>
@@ -275,7 +301,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
               />
             </>
           ) : (
-            <span className="text-text-secondary">-</span>
+            <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
           )}
         </div>
       </TableCell>
@@ -284,15 +310,15 @@ const NodeDataRow = ({ node }: { node: Node }) => {
           {isOnline && currentNode.ram ? (
             <>
               <span className="text-white font-medium w-24">
-                {currentNode.ram.current}GB / {currentNode.ram.max}GB
+                {ramCurrent}GB / {ramMax}GB
               </span>
               <Progress
-                value={(currentNode.ram.current / currentNode.ram.max) * 100}
+                value={ramUsage}
                 className="h-1.5 w-24 bg-background-dark [&>div]:bg-purple-500"
               />
             </>
           ) : (
-            <span className="text-text-secondary">-</span>
+             <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
           )}
         </div>
       </TableCell>
@@ -325,7 +351,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
             </span>
           )
         ) : (
-          <span className="text-text-secondary">-</span>
+           <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
         )}
       </TableCell>
       <TableCell className="text-right">
