@@ -12,6 +12,7 @@ import {
   Settings,
   File,
   Shield,
+  Code,
 } from "lucide-react";
 
 const menuItems = [
@@ -23,6 +24,7 @@ const menuItems = [
   { href: "/files", label: "Files", icon: File },
   { href: "/admin", label: "Admin", icon: Shield },
   { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/editor", label: "Code Editor", icon: Code },
 ];
 
 export function NavMenu() {
