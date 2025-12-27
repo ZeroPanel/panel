@@ -96,9 +96,10 @@ export function AdminForm() {
            // Extract the JSON object from the pasted text
           const startIndex = text.indexOf('{');
           const endIndex = text.lastIndexOf('}') + 1;
-          const jsonString = text.substring(startIndex, endIndex);
+          const objectString = text.substring(startIndex, endIndex);
 
-          const parsedConfig = JSON.parse(jsonString);
+          // Unsafe but effective way to parse a JS object literal
+          const parsedConfig = new Function(`return ${objectString}`)();
 
           if (parsedConfig.apiKey) setValue('config.firebase.apiKey', parsedConfig.apiKey);
           if (parsedConfig.authDomain) setValue('config.firebase.authDomain', parsedConfig.authDomain);
@@ -302,5 +303,6 @@ export function AdminForm() {
   );
 }
 
+    
     
     
