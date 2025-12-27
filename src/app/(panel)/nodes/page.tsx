@@ -178,31 +178,73 @@ function transformFirestoreData(doc: DocumentData): Node {
 const NodeDataRow = ({ node }: { node: Node }) => {
   const [currentNode, setCurrentNode] = useState<Node>(node);
   const [status, setStatus] = useState<NodeStatus>('Connecting');
-  
-  useEffect(() => {
-    if (!node.ip) {
-      setStatus('Offline');
+  const wsRef = useRef<WebSocket | null>(null);
+  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const connect = useCallback(() => {
+    if (!node.ip || (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)) {
+      if (!node.ip) setStatus('Offline');
       return;
     }
-
+  
     setStatus('Connecting');
+    if (wsRef.current) {
+        wsRef.current.close();
+    }
+
     const ws = new WebSocket(`wss://${node.ip}/health`);
+    wsRef.current = ws;
+
+    const clearTimers = () => {
+        if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        pingIntervalRef.current = null;
+        timeoutRef.current = null;
+    };
+    
+    const setupPing = () => {
+        clearTimers();
+        pingIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'health' }));
+
+                timeoutRef.current = setTimeout(() => {
+                    setStatus('Offline');
+                    clearTimers();
+                    ws.close();
+                }, 30000); 
+            }
+        }, 30000);
+    };
 
     ws.onopen = () => {
-      console.log(`WebSocket connected to ${node.ip}`);
-      ws.send(JSON.stringify({ type: 'health' }));
+        console.log(`WebSocket connected to ${node.ip}`);
+        ws.send(JSON.stringify({ type: 'health' }));
+        // Initial timeout to ensure first response
+        timeoutRef.current = setTimeout(() => {
+            setStatus('Offline');
+            ws.close();
+        }, 30000);
     };
 
     ws.onmessage = (event) => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'health_response') {
                 if (data.status === 'healthy') {
-                    setStatus('Online');
+                    if (status !== 'Online') {
+                        setStatus('Online');
+                        setupPing();
+                    }
                 } else if (data.status === 'maintenance') {
                     setStatus('Maint.');
+                    clearTimers();
                 } else {
                     setStatus('Offline');
+                    clearTimers();
                 }
                 setCurrentNode(prev => ({
                     ...prev,
@@ -221,15 +263,23 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     const handleCloseOrError = () => {
       console.log(`WebSocket disconnected from ${node.ip}`);
       setStatus('Offline');
+      clearTimers();
     };
 
     ws.onclose = handleCloseOrError;
     ws.onerror = handleCloseOrError;
-    
+  }, [node.ip, status]);
+
+  useEffect(() => {
+    connect();
     return () => {
-      ws.close();
+        if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (wsRef.current) {
+            wsRef.current.close();
+        }
     };
-  }, [node.ip]);
+  }, [connect]);
 
   const statusConfig = statusStyles[status];
   const isOnline = status === 'Online' || status === 'Maint.';
