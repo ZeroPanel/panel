@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -178,25 +178,51 @@ function transformFirestoreData(doc: DocumentData): Node {
 const NodeDataRow = ({ node }: { node: Node }) => {
   const [currentNode, setCurrentNode] = useState<Node>(node);
   const [status, setStatus] = useState<NodeStatus>('Connecting');
+  const wsRef = useRef<WebSocket | null>(null);
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryCountRef = useRef(0);
 
-  useEffect(() => {
-    if (!node.ip) {
-      setStatus('Offline');
-      return;
+  const cleanup = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.close();
+      wsRef.current = null;
     }
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+      healthCheckIntervalRef.current = null;
+    }
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  }, []);
+
+  const connect = useCallback(() => {
+    if (!node.ip || wsRef.current) return;
+
+    cleanup();
+    setStatus('Connecting');
 
     const ws = new WebSocket(`wss://${node.ip}/health`);
-    let healthCheckInterval: NodeJS.Timeout;
+    wsRef.current = ws;
 
     ws.onopen = () => {
-      setStatus('Connecting'); // Start as connecting, wait for first health response
-      healthCheckInterval = setInterval(() => {
+      console.log(`WebSocket connected to ${node.ip}`);
+      retryCountRef.current = 0; // Reset retry count on successful connection
+      
+      const sendHealthCheck = () => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'health' }));
         }
-      }, 30000);
-      // Send initial health check immediately
-      ws.send(JSON.stringify({ type: 'health' }));
+      };
+
+      sendHealthCheck(); // Initial health check
+      healthCheckIntervalRef.current = setInterval(sendHealthCheck, 30000);
     };
 
     ws.onmessage = (event) => {
@@ -210,14 +236,13 @@ const NodeDataRow = ({ node }: { node: Node }) => {
                 } else {
                     setStatus('Offline');
                 }
-
                 setCurrentNode(prev => ({
                     ...prev,
-                    cpu: data.memory?.usage ?? prev.cpu, // Assuming health response has cpu
-                    ram: {
-                        current: prev.ram ? prev.ram.current : 0, // Health response has memory, not ram. Adjusting.
-                        max: prev.ram ? prev.ram.max : 0
-                    }
+                    cpu: data.cpu?.usage ?? data.memory?.usage,
+                    ram: data.memory ? {
+                        current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
+                        max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
+                    } : prev.ram,
                 }));
             }
         } catch (e) {
@@ -225,28 +250,41 @@ const NodeDataRow = ({ node }: { node: Node }) => {
         }
     };
 
-    ws.onclose = () => {
+    const handleCloseOrError = () => {
+      console.log(`WebSocket disconnected from ${node.ip}`);
+      cleanup();
       setStatus('Offline');
-      clearInterval(healthCheckInterval);
-    };
-    
-    ws.onerror = () => {
-      setStatus('Offline');
-      clearInterval(healthCheckInterval);
+
+      retryCountRef.current += 1;
+      const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000); // Exponential backoff up to 30s
+      
+      console.log(`Retrying connection to ${node.ip} in ${delay}ms...`);
+      retryTimeoutRef.current = setTimeout(connect, delay);
     };
 
+    ws.onclose = handleCloseOrError;
+    ws.onerror = handleCloseOrError;
+  }, [node.ip, cleanup]);
+  
+  useEffect(() => {
+    if (!node.ip) {
+      setStatus('Offline');
+      return;
+    }
+    connect();
     return () => {
-      clearInterval(healthCheckInterval);
-      ws.close();
+      cleanup();
     };
-  }, [node.ip]);
+  }, [node.ip, connect, cleanup]);
 
   const statusConfig = statusStyles[status];
-  const isOnline = status === 'Online';
+  const isOnline = status === 'Online' || status === 'Maint.';
 
   const ramCurrent = (isOnline && currentNode.ram) ? currentNode.ram.current : 0;
   const ramMax = (isOnline && currentNode.ram) ? currentNode.ram.max : 0;
   const ramUsage = ramMax > 0 ? (ramCurrent / ramMax) * 100 : 0;
+  
+  const cpuUsage = (isOnline && currentNode.cpu !== null) ? currentNode.cpu : null;
 
   return (
     <TableRow>
@@ -280,23 +318,23 @@ const NodeDataRow = ({ node }: { node: Node }) => {
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-3">
-          {isOnline && currentNode.cpu !== null ? (
+          {cpuUsage !== null ? (
             <>
               <span
                 className={cn(
                   'w-8 text-right font-medium',
-                  currentNode.cpu > 80
+                  cpuUsage > 80
                     ? 'text-amber-400'
                     : 'text-white'
                 )}
               >
-                {currentNode.cpu}%
+                {cpuUsage}%
               </span>
               <Progress
-                value={currentNode.cpu}
+                value={cpuUsage}
                 className={cn(
                   'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
-                  currentNode.cpu > 80 && '[&>div]:bg-amber-500'
+                  cpuUsage > 80 && '[&>div]:bg-amber-500'
                 )}
               />
             </>
@@ -310,7 +348,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
           {isOnline && currentNode.ram ? (
             <>
               <span className="text-white font-medium w-24">
-                {ramCurrent}GB / {ramMax}GB
+                {ramCurrent.toFixed(1)}GB / {ramMax.toFixed(1)}GB
               </span>
               <Progress
                 value={ramUsage}
