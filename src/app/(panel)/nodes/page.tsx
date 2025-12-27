@@ -178,55 +178,19 @@ function transformFirestoreData(doc: DocumentData): Node {
 const NodeDataRow = ({ node }: { node: Node }) => {
   const [currentNode, setCurrentNode] = useState<Node>(node);
   const [status, setStatus] = useState<NodeStatus>('Connecting');
-  const wsRef = useRef<WebSocket | null>(null);
-  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const retryCountRef = useRef(0);
+  
+  useEffect(() => {
+    if (!node.ip) {
+      setStatus('Offline');
+      return;
+    }
 
-  const cleanup = useCallback(() => {
-    if (wsRef.current) {
-      // Prevent further events from firing
-      wsRef.current.onopen = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.onclose = null;
-      wsRef.current.onerror = null;
-      
-      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-        wsRef.current.close();
-      }
-      wsRef.current = null;
-    }
-    if (healthCheckIntervalRef.current) {
-      clearInterval(healthCheckIntervalRef.current);
-      healthCheckIntervalRef.current = null;
-    }
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
-    }
-  }, []);
-
-  const connect = useCallback(() => {
-    if (!node.ip || wsRef.current) return;
-    
-    cleanup();
     setStatus('Connecting');
-
     const ws = new WebSocket(`wss://${node.ip}/health`);
-    wsRef.current = ws;
 
     ws.onopen = () => {
       console.log(`WebSocket connected to ${node.ip}`);
-      retryCountRef.current = 0; // Reset retry count on successful connection
-      
-      const sendHealthCheck = () => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'health' }));
-        }
-      };
-
-      sendHealthCheck(); // Initial health check
-      healthCheckIntervalRef.current = setInterval(sendHealthCheck, 30000);
+      ws.send(JSON.stringify({ type: 'health' }));
     };
 
     ws.onmessage = (event) => {
@@ -253,39 +217,19 @@ const NodeDataRow = ({ node }: { node: Node }) => {
             console.error("Failed to parse health check response", e);
         }
     };
-
+    
     const handleCloseOrError = () => {
-      // Only proceed if this WebSocket is still the current one
-      if (wsRef.current !== ws) {
-        return;
-      }
       console.log(`WebSocket disconnected from ${node.ip}`);
-      cleanup();
       setStatus('Offline');
-
-      retryCountRef.current += 1;
-      const delay = Math.min(1000 * 2 ** retryCountRef.current, 30000); // Exponential backoff up to 30s
-      
-      console.log(`Retrying connection to ${node.ip} in ${delay}ms...`);
-      retryTimeoutRef.current = setTimeout(connect, delay);
     };
 
     ws.onclose = handleCloseOrError;
     ws.onerror = handleCloseOrError;
-  }, [node.ip, cleanup]);
-  
-  useEffect(() => {
-    if (!node.ip) {
-      setStatus('Offline');
-      return;
-    }
-    connect();
-    // This return function is the cleanup function for the useEffect hook.
-    // It's called when the component unmounts.
+    
     return () => {
-      cleanup();
+      ws.close();
     };
-  }, [node.ip, connect, cleanup]);
+  }, [node.ip]);
 
   const statusConfig = statusStyles[status];
   const isOnline = status === 'Online' || status === 'Maint.';
