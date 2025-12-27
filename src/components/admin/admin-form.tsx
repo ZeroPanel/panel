@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm, Controller, useWatch } from "react-hook-form";
@@ -10,8 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Info, Server, Database, Rss } from "lucide-react";
+import { CheckCircle, Info, Server, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 
 type BackendType = "none" | "firebase" | "supabase" | "rest";
 
@@ -85,6 +87,53 @@ export function AdminForm() {
 
   const watchedBackend = useWatch({ control, name: "backend" });
   const isEnabled = useWatch({ control, name: "enabled" });
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData('text');
+      if (text && text.includes('const firebaseConfig')) {
+        try {
+          const jsonString = text
+            .replace('const firebaseConfig =', '')
+            .replace(/;/g, '')
+            .trim()
+            // Add quotes to keys
+            .replace(/(\w+):/g, '"$1":');
+
+          const parsedConfig = JSON.parse(jsonString);
+
+          if (parsedConfig.apiKey) setValue('config.firebase.apiKey', parsedConfig.apiKey);
+          if (parsedConfig.authDomain) setValue('config.firebase.authDomain', parsedConfig.authDomain);
+          if (parsedConfig.projectId) setValue('config.firebase.projectId', parsedConfig.projectId);
+          if (parsedConfig.storageBucket) setValue('config.firebase.storageBucket', parsedConfig.storageBucket);
+          if (parsedConfig.messagingSenderId) setValue('config.firebase.messagingSenderId', parsedConfig.messagingSenderId);
+          if (parsedConfig.appId) setValue('config.firebase.appId', parsedConfig.appId);
+          
+          setValue('backend', 'firebase');
+
+          toast({
+            title: "Firebase Config Pasted",
+            description: "The Firebase configuration has been automatically filled.",
+          });
+
+        } catch (error) {
+          console.error("Failed to parse pasted Firebase config:", error);
+          toast({
+            variant: 'destructive',
+            title: "Pasting Error",
+            description: "Could not automatically parse the pasted Firebase config.",
+          });
+        }
+      }
+    };
+    
+    document.addEventListener('paste', handlePaste);
+
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [setValue, toast]);
+
 
   const onSubmit = async (data: AdminFormValues) => {
     setSavedConfig(data);
@@ -254,3 +303,5 @@ export function AdminForm() {
     </form>
   );
 }
+
+    
