@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState, useEffect } from 'react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -46,6 +47,7 @@ import { useAppState } from '@/components/app-state-provider';
 type NodeStatus = 'Online' | 'Offline' | 'Maint.';
 
 type Node = {
+  id: string;
   name: string;
   ip: string;
   location: {
@@ -68,6 +70,7 @@ type Node = {
 
 const mockNodes: Node[] = [
   {
+    id: 'mock-1',
     name: 'Node-Alpha-01',
     ip: '192.168.1.101',
     location: { city: 'New York', flag: '🇺🇸' },
@@ -77,6 +80,7 @@ const mockNodes: Node[] = [
     disk: { current: '240', unit: 'GB' },
   },
   {
+    id: 'mock-2',
     name: 'Node-Beta-02',
     ip: '10.0.0.45',
     location: { city: 'Frankfurt', flag: '🇩🇪' },
@@ -86,6 +90,7 @@ const mockNodes: Node[] = [
     disk: { current: '120', unit: 'GB' },
   },
   {
+    id: 'mock-3',
     name: 'Node-Gamma-03',
     ip: '192.168.1.55',
     location: { city: 'Tokyo', flag: '🇯🇵' },
@@ -95,6 +100,7 @@ const mockNodes: Node[] = [
     disk: null,
   },
   {
+    id: 'mock-4',
     name: 'Node-Delta-04',
     ip: '172.16.0.22',
     location: { city: 'Singapore', flag: '🇸🇬' },
@@ -104,6 +110,7 @@ const mockNodes: Node[] = [
     disk: { current: '500', unit: 'GB' },
   },
   {
+    id: 'mock-5',
     name: 'Node-Epsilon-05',
     ip: '192.168.2.200',
     location: { city: 'London', flag: '🇬🇧' },
@@ -145,8 +152,10 @@ const filterPills = [
   { label: 'Maintenance', count: 1, status: 'Maint.' as NodeStatus },
 ];
 
-function transformFirestoreData(data: DocumentData): Node {
+function transformFirestoreData(doc: DocumentData): Node {
+    const data = doc.data();
     return {
+        id: doc.id,
         name: data.name || '',
         ip: data.ip || '',
         location: {
@@ -161,15 +170,83 @@ function transformFirestoreData(data: DocumentData): Node {
 }
 
 
+const NodeStatusCell = ({ node }: { node: Node }) => {
+  const [status, setStatus] = useState<NodeStatus>(node.status);
+
+  useEffect(() => {
+    if (!node.ip) return;
+
+    const ws = new WebSocket(`wss://${node.ip}/health`);
+    
+    ws.onopen = () => {
+      setStatus('Online');
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.status && ['Online', 'Offline', 'Maint.'].includes(data.status)) {
+                setStatus(data.status);
+            }
+        } catch (e) {
+            // Not a JSON message, might be a simple status string
+             if (['Online', 'Offline', 'Maint.'].includes(event.data)) {
+                setStatus(event.data);
+            }
+        }
+    };
+
+    ws.onclose = () => {
+      setStatus('Offline');
+    };
+    
+    ws.onerror = () => {
+      setStatus('Offline');
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [node.ip]);
+  
+  const statusConfig = statusStyles[status];
+
+  return (
+    <TableCell>
+      <div
+        className={cn(
+          'flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium w-fit',
+          statusConfig.bg,
+          statusConfig.text
+        )}
+      >
+        <span
+          className={cn('size-2 rounded-full', statusConfig.dot)}
+        />
+        {status}
+      </div>
+    </TableCell>
+  );
+};
+
+
 export default function NodesPage() {
   const { isFirebaseEnabled } = useAppState();
   const firestore = isFirebaseEnabled ? useFirestore() : null;
   const nodesCollection = firestore ? collection(firestore, 'nodes') : null;
   const [snapshot, loading, error] = useCollection(nodesCollection);
+  const [currentPage, setCurrentPage] = useState(1);
+  const nodesPerPage = 10;
   
-  const nodes = isFirebaseEnabled 
-    ? snapshot?.docs.map(doc => transformFirestoreData(doc.data())) || []
+  const allNodes = isFirebaseEnabled 
+    ? snapshot?.docs.map(transformFirestoreData) || []
     : mockNodes;
+
+  const totalPages = Math.ceil(allNodes.length / nodesPerPage);
+  const paginatedNodes = allNodes.slice(
+      (currentPage - 1) * nodesPerPage,
+      currentPage * nodesPerPage
+  );
     
   if (isFirebaseEnabled && error) {
     return <div>Error: {error.message}</div>;
@@ -287,10 +364,9 @@ export default function NodesPage() {
                     <TableCell colSpan={7} className="text-center text-text-secondary">Loading nodes from Firestore...</TableCell>
                 </TableRow>
             )}
-            { !loading && nodes.map((node, index) => {
-              const statusConfig = statusStyles[node.status];
+            { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => {
               return (
-                <TableRow key={index}>
+                <TableRow key={node.id}>
                   <TableCell>
                     <div className="font-medium text-white">{node.name}</div>
                     <div className="text-sm text-text-secondary font-mono">
@@ -305,20 +381,7 @@ export default function NodesPage() {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div
-                      className={cn(
-                        'flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium w-fit',
-                        statusConfig.bg,
-                        statusConfig.text
-                      )}
-                    >
-                      <span
-                        className={cn('size-2 rounded-full', statusConfig.dot)}
-                      />
-                      {node.status}
-                    </div>
-                  </TableCell>
+                  <NodeStatusCell node={node} />
                   <TableCell>
                     <div className="flex items-center gap-3">
                       {node.cpu !== null ? (
@@ -403,14 +466,11 @@ export default function NodesPage() {
                 </TableRow>
               );
             })}
-             { !isFirebaseEnabled && !loading && nodes.length === 0 && (
+             { !loading && paginatedNodes.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={7} className="text-center text-text-secondary">No nodes found.</TableCell>
-                </TableRow>
-             )}
-             { isFirebaseEnabled && !loading && nodes.length === 0 && (
-                <TableRow>
-                    <TableCell colSpan={7} className="text-center text-text-secondary">No nodes found in Firestore. Add data to the 'nodes' collection.</TableCell>
+                    <TableCell colSpan={7} className="text-center text-text-secondary h-24">
+                        No nodes found. <Link href="/nodes/create" className="text-primary hover:underline">Add nodes</Link> by creating new ones.
+                    </TableCell>
                 </TableRow>
              )}
           </TableBody>
@@ -418,26 +478,49 @@ export default function NodesPage() {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between text-sm text-text-secondary">
-        <div>Showing {nodes.length} of {nodes.length} nodes</div>
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious href="#" />
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationLink href="#" isActive>
-                1
-              </PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext href="#" />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-text-secondary">
+            <div>Showing {paginatedNodes.length} of {allNodes.length} nodes</div>
+            <Pagination>
+            <PaginationContent>
+                <PaginationItem>
+                <PaginationPrevious 
+                    href="#"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentPage(p => Math.max(1, p - 1));
+                    }}
+                    className={cn(currentPage === 1 && "pointer-events-none opacity-50")}
+                />
+                </PaginationItem>
+                {[...Array(totalPages)].map((_, i) => (
+                    <PaginationItem key={i}>
+                        <PaginationLink 
+                            href="#" 
+                            isActive={currentPage === i + 1}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentPage(i + 1)
+                            }}
+                        >
+                        {i + 1}
+                        </PaginationLink>
+                    </PaginationItem>
+                ))}
+                <PaginationItem>
+                <PaginationNext 
+                    href="#" 
+                    onClick={(e) => {
+                        e.preventDefault();
+                        setCurrentPage(p => Math.min(totalPages, p + 1));
+                    }}
+                    className={cn(currentPage === totalPages && "pointer-events-none opacity-50")}
+                />
+                </PaginationItem>
+            </PaginationContent>
+            </Pagination>
+        </div>
+      )}
     </div>
   );
 }
-
-    
