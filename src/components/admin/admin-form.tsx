@@ -58,20 +58,20 @@ export function AdminForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
-      <Card>
+      <Card className="max-w-3xl mx-auto">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>Admin Panel</CardTitle>
+            <CardTitle>Admin Backend Configuration</CardTitle>
             <Badge variant={connectionVariant}>Status: {connectionStatus}</Badge>
           </div>
-          <CardDescription>Configure the backend connection for your panel. This is a UI-only simulation.</CardDescription>
+          <CardDescription>Configure the backend connection for your panel. This is a UI-only developer tool.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Alert>
+          <Alert variant="destructive" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 [&>svg]:text-yellow-500">
             <Info className="h-4 w-4" />
             <AlertTitle>Developer Note</AlertTitle>
             <AlertDescription>
-              Backend integration is not yet implemented. This panel saves your configuration to local storage for future use.
+              This panel is for debug purposes. Backend integration is not yet implemented, and this configuration is only saved to your browser's local storage.
             </AlertDescription>
           </Alert>
 
