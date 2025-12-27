@@ -93,12 +93,10 @@ export function AdminForm() {
       const text = event.clipboardData?.getData('text');
       if (text && text.includes('const firebaseConfig')) {
         try {
-          const jsonString = text
-            .replace('const firebaseConfig =', '')
-            .replace(/;/g, '')
-            .trim()
-            // Add quotes to keys
-            .replace(/(\w+):/g, '"$1":');
+           // Extract the JSON object from the pasted text
+          const startIndex = text.indexOf('{');
+          const endIndex = text.lastIndexOf('}') + 1;
+          const jsonString = text.substring(startIndex, endIndex);
 
           const parsedConfig = JSON.parse(jsonString);
 
@@ -304,4 +302,5 @@ export function AdminForm() {
   );
 }
 
+    
     
