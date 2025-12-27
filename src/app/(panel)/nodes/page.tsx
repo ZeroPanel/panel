@@ -21,7 +21,6 @@ import {
 import {
   Pagination,
   PaginationContent,
-  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -37,10 +36,12 @@ import {
   Power,
   PowerOff,
 } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, DocumentData } from 'firebase/firestore';
+import { useAppState } from '@/components/app-state-provider';
 
 type NodeStatus = 'Online' | 'Offline' | 'Maint.';
 
@@ -65,7 +66,7 @@ type Node = {
   } | null;
 };
 
-const nodes: Node[] = [
+const mockNodes: Node[] = [
   {
     name: 'Node-Alpha-01',
     ip: '192.168.1.101',
@@ -144,7 +145,36 @@ const filterPills = [
   { label: 'Maintenance', count: 1, status: 'Maint.' as NodeStatus },
 ];
 
+function transformFirestoreData(data: DocumentData): Node {
+    return {
+        name: data.name || '',
+        ip: data.ip || '',
+        location: {
+            city: data.location?.city || '',
+            flag: data.location?.flag || '',
+        },
+        status: data.status || 'Offline',
+        cpu: data.cpu,
+        ram: data.ram,
+        disk: data.disk,
+    };
+}
+
+
 export default function NodesPage() {
+  const { isFirebaseEnabled } = useAppState();
+  const firestore = isFirebaseEnabled ? useFirestore() : null;
+  const nodesCollection = firestore ? collection(firestore, 'nodes') : null;
+  const [snapshot, loading, error] = useCollection(nodesCollection);
+  
+  const nodes = isFirebaseEnabled 
+    ? snapshot?.docs.map(doc => transformFirestoreData(doc.data())) || []
+    : mockNodes;
+    
+  if (isFirebaseEnabled && error) {
+    return <div>Error: {error.message}</div>;
+  }
+
   return (
     <div className="flex flex-col gap-8 max-w-7xl mx-auto">
       {/* Header */}
@@ -252,7 +282,12 @@ export default function NodesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {nodes.map((node, index) => {
+            { (isFirebaseEnabled && loading) && (
+                <TableRow>
+                    <TableCell colSpan={7} className="text-center text-text-secondary">Loading nodes from Firestore...</TableCell>
+                </TableRow>
+            )}
+            { !loading && nodes.map((node, index) => {
               const statusConfig = statusStyles[node.status];
               return (
                 <TableRow key={index}>
@@ -368,13 +403,23 @@ export default function NodesPage() {
                 </TableRow>
               );
             })}
+             { !isFirebaseEnabled && !loading && nodes.length === 0 && (
+                <TableRow>
+                    <TableCell colSpan={7} className="text-center text-text-secondary">No nodes found.</TableCell>
+                </TableRow>
+             )}
+             { isFirebaseEnabled && !loading && nodes.length === 0 && (
+                <TableRow>
+                    <TableCell colSpan={7} className="text-center text-text-secondary">No nodes found in Firestore. Add data to the 'nodes' collection.</TableCell>
+                </TableRow>
+             )}
           </TableBody>
         </Table>
       </div>
 
       {/* Pagination */}
       <div className="flex items-center justify-between text-sm text-text-secondary">
-        <div>Showing 1-5 of 15 nodes</div>
+        <div>Showing {nodes.length} of {nodes.length} nodes</div>
         <Pagination>
           <PaginationContent>
             <PaginationItem>
@@ -386,12 +431,6 @@ export default function NodesPage() {
               </PaginationLink>
             </PaginationItem>
             <PaginationItem>
-              <PaginationLink href="#">2</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationLink href="#">3</PaginationLink>
-            </PaginationItem>
-            <PaginationItem>
               <PaginationNext href="#" />
             </PaginationItem>
           </PaginationContent>
@@ -400,3 +439,5 @@ export default function NodesPage() {
     </div>
   );
 }
+
+    
