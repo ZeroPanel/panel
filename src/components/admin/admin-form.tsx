@@ -2,7 +2,6 @@
 "use client";
 
 import { useForm, Controller, useWatch } from "react-hook-form";
-import { useLocalStorage } from "@/hooks/use-local-storage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Info, Server, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 type BackendType = "none" | "firebase" | "supabase" | "rest";
 
@@ -79,11 +78,11 @@ const databaseOptions: { id: BackendType; name: string; logo: React.ReactNode; }
   ];
 
 export function AdminForm() {
-  const [savedConfig, setSavedConfig] = useLocalStorage<AdminFormValues>("admin-config", defaultValues);
   const { control, handleSubmit, reset, setValue } = useForm<AdminFormValues>({
-    defaultValues: savedConfig,
+    defaultValues: defaultValues,
   });
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const watchedBackend = useWatch({ control, name: "backend" });
   const isEnabled = useWatch({ control, name: "enabled" });
@@ -93,13 +92,8 @@ export function AdminForm() {
       const text = event.clipboardData?.getData('text');
       if (text && text.includes('const firebaseConfig')) {
         try {
-           // Extract the JSON object from the pasted text
-          const startIndex = text.indexOf('{');
-          const endIndex = text.lastIndexOf('}') + 1;
-          const objectString = text.substring(startIndex, endIndex);
-
-          // Unsafe but effective way to parse a JS object literal
-          const parsedConfig = new Function(`return ${objectString}`)();
+           // Unsafe but effective way to parse a JS object literal
+          const parsedConfig = new Function(`return ${text.substring(text.indexOf('{'))}`)();
 
           if (parsedConfig.apiKey) setValue('config.firebase.apiKey', parsedConfig.apiKey);
           if (parsedConfig.authDomain) setValue('config.firebase.authDomain', parsedConfig.authDomain);
@@ -135,8 +129,8 @@ export function AdminForm() {
 
 
   const onSubmit = async (data: AdminFormValues) => {
-    setSavedConfig(data);
-
+    setIsSubmitting(true);
+    
     if (data.backend === 'firebase' && data.enabled) {
         try {
             const response = await fetch('/api/config', {
@@ -166,12 +160,14 @@ export function AdminForm() {
                 title: "Error Saving Config",
                 description: errorMessage,
             });
+            setIsSubmitting(false);
         }
     } else {
          toast({
-            title: "Admin Configuration Saved",
-            description: "Your backend configuration has been saved locally.",
+            title: "Admin Configuration Action",
+            description: "No backend action taken. Save your configuration locally if needed.",
         });
+        setIsSubmitting(false);
     }
   };
 
@@ -294,8 +290,10 @@ export function AdminForm() {
                 <Label htmlFor="enabled">Enable Backend Connection</Label>
             </div>
             <div className="flex justify-end w-full gap-2">
-                <Button type="button" variant="outline" onClick={() => reset(savedConfig)}>Reset</Button>
-                <Button type="submit">Save Configuration</Button>
+                <Button type="button" variant="outline" onClick={() => reset(defaultValues)}>Reset</Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Saving...' : 'Save Configuration'}
+                </Button>
             </div>
         </CardFooter>
       </Card>
@@ -303,6 +301,4 @@ export function AdminForm() {
   );
 }
 
-    
-    
     
