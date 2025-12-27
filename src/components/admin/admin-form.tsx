@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Info, Server, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { useLocalStorage } from "@/hooks/use-local-storage";
 
 type BackendType = "none" | "firebase" | "supabase" | "rest";
 
@@ -68,7 +67,7 @@ const databaseOptions: { id: BackendType; name: string; logo: React.ReactNode; }
       id: "supabase",
       name: "Supabase",
       logo: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="#3ecf8e" d="M12.28.32a.49.49 0 0 0-.56 0L.32 7.55a.48.48 0 0 0-.25.35c-.03.1-.03.22.02.32L4.03 21.7a.48.48 0 0 0 .44.3h15.06a.48.48 0 0 0 .44-.3l3.94-13.48c.05-.1.05-.22.02-.32a.48.48 0 0 0-.25-.35L12.28.32Zm.46 15.65c-2.9 1.44-6.33-1.07-6.33-4.32c0-3.25 3.52-6.04 6.43-4.5s2.7 5.95-2.22 8.82Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0-0 24 24"><path fill="#3ecf8e" d="M12.28.32a.49.49 0 0 0-.56 0L.32 7.55a.48.48 0 0 0-.25.35c-.03.1-.03.22.02.32L4.03 21.7a.48.48 0 0 0 .44.3h15.06a.48.48 0 0 0 .44-.3l3.94-13.48c.05-.1.05-.22.02-.32a.48.48 0 0 0-.25-.35L12.28.32Zm.46 15.65c-2.9 1.44-6.33-1.07-6.33-4.32c0-3.25 3.52-6.04 6.43-4.5s2.7 5.95-2.22 8.82Z"/></svg>
       ),
     },
     {
@@ -79,13 +78,31 @@ const databaseOptions: { id: BackendType; name: string; logo: React.ReactNode; }
   ];
 
 export function AdminForm() {
-  const [savedConfig, setSavedConfig] = useLocalStorage<AdminFormValues>("admin-config", defaultValues);
-
   const { control, handleSubmit, reset, setValue } = useForm<AdminFormValues>({
-    defaultValues: savedConfig,
+    defaultValues,
   });
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/admin-config');
+        if (response.ok) {
+          const data = await response.json();
+          reset(data); // reset the form with fetched data
+        } else {
+          console.error("Failed to fetch admin config");
+        }
+      } catch (error) {
+        console.error("Error fetching admin config:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchConfig();
+  }, [reset]);
 
   const watchedBackend = useWatch({ control, name: "backend" });
   const isEnabled = useWatch({ control, name: "enabled" });
@@ -133,43 +150,34 @@ export function AdminForm() {
 
   const onSubmit = async (data: AdminFormValues) => {
     setIsSubmitting(true);
-    setSavedConfig(data);
     
-    if (data.backend === 'firebase' && data.enabled) {
-        try {
-            const response = await fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ config: data.config.firebase }),
-            });
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to update config file.');
-            }
-
-            toast({
-                title: "Firebase Config Updated",
-                description: "The Firebase configuration has been saved. Reloading the site...",
-            });
-
-            // Reload the page to apply the new server-side config
-            setTimeout(() => window.location.reload(), 2000);
-
-        } catch (error) {
-            console.error('Error saving Firebase config:', error);
-            const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-            toast({
-                variant: 'destructive',
-                title: "Error Saving Config",
-                description: errorMessage,
-            });
-            setIsSubmitting(false);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update config file.');
         }
-    } else {
-         toast({
-            title: "Admin Configuration Saved",
-            description: "Your backend configuration has been saved locally.",
+
+        toast({
+            title: "Configuration Saved",
+            description: "Your configuration has been saved. Reloading the site...",
+        });
+
+        // Reload the page to apply the new server-side config
+        setTimeout(() => window.location.reload(), 2000);
+
+    } catch (error) {
+        console.error('Error saving config:', error);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+        toast({
+            variant: 'destructive',
+            title: "Error Saving Config",
+            description: errorMessage,
         });
         setIsSubmitting(false);
     }
@@ -177,6 +185,22 @@ export function AdminForm() {
 
   const connectionStatus = isEnabled && watchedBackend !== 'none' ? "Connected" : "Disabled";
   const connectionVariant = connectionStatus === 'Connected' ? 'default' : 'secondary';
+  
+  if (isLoading) {
+    return (
+        <Card className="max-w-3xl mx-auto">
+            <CardHeader>
+                <CardTitle>Admin Backend Configuration</CardTitle>
+                <CardDescription>Loading configuration...</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex justify-center items-center h-64">
+                    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)}>

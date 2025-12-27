@@ -1,7 +1,6 @@
 "use client";
 
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { FirebaseClientProvider } from "@/firebase/client-provider";
 
 type AdminConfig = {
@@ -16,9 +15,31 @@ type AppStateContextType = {
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [savedConfig] = useLocalStorage<AdminConfig>("admin-config", { backend: 'none', enabled: false });
+  const [config, setConfig] = useState<AdminConfig>({ backend: 'none', enabled: false });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const isFirebaseEnabled = savedConfig.backend === 'firebase' && savedConfig.enabled;
+  useEffect(() => {
+    fetch('/api/admin-config')
+      .then(res => res.json())
+      .then(data => {
+        setConfig(data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to load admin config:", err);
+        setIsLoading(false);
+      });
+  }, []);
+
+  const isFirebaseEnabled = config.backend === 'firebase' && config.enabled;
+
+  if (isLoading) {
+    return (
+        <div className="flex justify-center items-center h-screen bg-background">
+            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-primary"></div>
+        </div>
+    );
+  }
 
   return (
     <AppStateContext.Provider value={{ isFirebaseEnabled }}>

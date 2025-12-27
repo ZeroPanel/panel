@@ -1,0 +1,22 @@
+{
+  "backend": "none",
+  "enabled": false,
+  "config": {
+    "firebase": {
+      "projectId": "",
+      "apiKey": "",
+      "authDomain": "",
+      "storageBucket": "",
+      "messagingSenderId": "",
+      "appId": ""
+    },
+    "supabase": {
+      "projectUrl": "",
+      "anonKey": ""
+    },
+    "rest": {
+      "apiUrl": "",
+      "authToken": ""
+    }
+  }
+}

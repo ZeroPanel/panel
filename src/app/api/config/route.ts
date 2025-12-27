@@ -8,18 +8,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { config } = await request.json();
+    const adminConfig = await request.json();
 
-    if (!config) {
+    if (!adminConfig || !adminConfig.config) {
       return new NextResponse('Invalid configuration provided.', { status: 400 });
     }
 
-    const configContent = `export const firebaseConfig = ${JSON.stringify(config, null, 2)};\n`;
+    const adminConfigPath = path.join(process.cwd(), 'src/lib/admin-config.json');
+    await fs.writeFile(adminConfigPath, JSON.stringify(adminConfig, null, 2), 'utf-8');
     
-    // Unsafe: This is a simplified example. In a real-world scenario,
-    // you would need to be very careful about writing to the file system.
-    const configPath = path.join(process.cwd(), 'src/firebase/config.ts');
-    await fs.writeFile(configPath, configContent, 'utf-8');
+    // Also update the firebase config if it's the selected backend and enabled
+    if (adminConfig.backend === 'firebase') {
+        const firebaseConfigContent = `export const firebaseConfig = ${JSON.stringify(adminConfig.config.firebase, null, 2)};\n`;
+        const firebaseConfigPath = path.join(process.cwd(), 'src/firebase/config.ts');
+        await fs.writeFile(firebaseConfigPath, firebaseConfigContent, 'utf-8');
+    }
 
     return new NextResponse(JSON.stringify({ message: 'Configuration updated successfully.' }), { status: 200 });
   } catch (error) {
