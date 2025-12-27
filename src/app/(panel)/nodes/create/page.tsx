@@ -99,6 +99,7 @@ export default function CreateNodePage() {
       newWs.addEventListener('error', errorHandler);
 
     } catch (e) {
+      console.error("Failed to create WebSocket:", e);
       setConnectionStatus('Error');
     }
   }, [ws]);
@@ -322,3 +323,5 @@ export default function CreateNodePage() {
     </div>
   );
 }
+
+    
