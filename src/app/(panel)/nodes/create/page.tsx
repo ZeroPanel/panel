@@ -45,10 +45,20 @@ import { cn } from '@/lib/utils';
 
 type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 
+type SystemInfo = {
+    type: 'system_info';
+    data: {
+        storage: { total: number };
+        ram: { total: number };
+    };
+};
+
 export default function CreateNodePage() {
   const [fqdn, setFqdn] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('Disconnected');
   const wsRef = useRef<WebSocket | null>(null);
+  const [totalMemory, setTotalMemory] = useState('16384');
+  const [totalDisk, setTotalDisk] = useState('512000');
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -79,7 +89,17 @@ export default function CreateNodePage() {
         };
 
         const messageHandler = (event: MessageEvent) => {
-          console.log('WebSocket message received:', event.data);
+          try {
+            const messageData: SystemInfo = JSON.parse(event.data);
+            if (messageData.type === 'system_info') {
+                const memoryMb = Math.round(messageData.data.ram.total / (1024 * 1024));
+                const diskMb = Math.round(messageData.data.storage.total / (1024 * 1024));
+                setTotalMemory(memoryMb.toString());
+                setTotalDisk(diskMb.toString());
+            }
+          } catch (e) {
+            console.log("WebSocket message received (not JSON):", event.data);
+          }
         };
 
         const closeHandler = () => {
@@ -268,7 +288,7 @@ export default function CreateNodePage() {
                     <span className="text-xs font-medium bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">RAM</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Input id="total-memory" defaultValue="16384" />
+                    <Input id="total-memory" value={totalMemory} onChange={(e) => setTotalMemory(e.target.value)} />
                     <span className="text-sm text-text-secondary font-medium">MB</span>
                 </div>
                  <div className="space-y-2 pt-2">
@@ -286,7 +306,7 @@ export default function CreateNodePage() {
                     <span className="text-xs font-medium bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">SSD</span>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Input id="total-disk" defaultValue="512000" />
+                    <Input id="total-disk" value={totalDisk} onChange={(e) => setTotalDisk(e.target.value)} />
                     <span className="text-sm text-text-secondary font-medium">MB</span>
                 </div>
                  <div className="space-y-2 pt-2">
@@ -317,5 +337,3 @@ export default function CreateNodePage() {
     </div>
   );
 }
-
-    
