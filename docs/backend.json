@@ -1,0 +1,84 @@
+
+{
+  "entities": {
+    "Node": {
+      "title": "Node",
+      "description": "Represents a server node in the infrastructure.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the node."
+        },
+        "ip": {
+          "type": "string",
+          "description": "The IP address of the node."
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            },
+            "flag": {
+              "type": "string"
+            }
+          },
+          "required": ["city", "flag"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Online", "Offline", "Maint."],
+          "description": "The current status of the node."
+        },
+        "cpu": {
+          "type": "number",
+          "description": "The current CPU usage percentage."
+        },
+        "ram": {
+          "type": "object",
+          "properties": {
+            "current": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": ["current", "max"]
+        },
+        "disk": {
+          "type": "object",
+          "properties": {
+            "current": {
+              "type": ["number", "string"]
+            },
+            "max": {
+              "type": "number"
+            },
+            "unit": {
+              "type": "string",
+              "enum": ["GB", "TB"]
+            },
+            "isUsage": {
+                "type": "boolean"
+            }
+          },
+          "required": ["current", "unit"]
+        }
+      },
+      "required": ["name", "ip", "location", "status"]
+    }
+  },
+  "auth": {
+    "providers": []
+  },
+  "firestore": {
+    "/nodes/{nodeId}": {
+      "schema": {
+        "$ref": "#/entities/Node"
+      },
+      "description": "Stores information about individual server nodes."
+    }
+  }
+}
