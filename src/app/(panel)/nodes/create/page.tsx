@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -40,10 +41,15 @@ import {
   Share,
   Wifi,
   WifiOff,
-  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { useFirestore } from '@/firebase';
+import { addDoc, collection } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { useAppState } from '@/components/app-state-provider';
 
 type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 
@@ -57,12 +63,101 @@ type SystemInfo = {
 };
 
 export default function CreateNodePage() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { isFirebaseEnabled } = useAppState();
+  const firestore = isFirebaseEnabled ? useFirestore() : null;
+
+  const [nodeName, setNodeName] = useState('');
+  const [location, setLocation] = useState('us-nyc-01');
+  const [description, setDescription] = useState('');
+  const [isPublic, setIsPublic] = useState(false);
+  const [useSsl, setUseSsl] = useState(true);
+  
   const [fqdn, setFqdn] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('Disconnected');
   const wsRef = useRef<WebSocket | null>(null);
   const [totalMemory, setTotalMemory] = useState('16384');
   const [totalDisk, setTotalDisk] = useState('512000');
   const [cpuInfo, setCpuInfo] = useState<{ model: string; count: number } | null>(null);
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const locationMap: { [key: string]: { city: string, flag: string } } = {
+    'us-nyc-01': { city: 'New York', flag: '🇺🇸' },
+    'de-fra-01': { city: 'Frankfurt', flag: '🇩🇪' },
+    'jp-tok-01': { city: 'Tokyo', flag: '🇯🇵' },
+  };
+
+  const handleCreateNode = async () => {
+    if (!firestore) {
+        toast({
+            variant: "destructive",
+            title: "Database Not Connected",
+            description: "Cannot create a node because the connection to Firestore is not enabled.",
+        });
+        return;
+    }
+     if (!nodeName || !fqdn) {
+      toast({
+        variant: "destructive",
+        title: "Missing Information",
+        description: "Please provide a Node Name and a Fully Qualified Domain Name.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    
+    const newNode = {
+        name: nodeName,
+        ip: fqdn,
+        location: locationMap[location],
+        status: 'Offline', // Will be updated by health check on the nodes page
+        description,
+        isPublic,
+        useSsl,
+        cpu: cpuInfo ? cpuInfo.count : null,
+        ram: {
+            current: 0,
+            max: parseFloat(totalMemory) / 1024 // Assuming totalMemory is in MB
+        },
+        disk: {
+            current: '0', // This would typically be fetched dynamically
+            max: parseFloat(totalDisk) / 1024,
+            unit: 'GB'
+        }
+    };
+
+    try {
+        const nodesCollection = collection(firestore, 'nodes');
+        addDoc(nodesCollection, newNode)
+            .catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                path: nodesCollection.path,
+                operation: 'create',
+                requestResourceData: newNode,
+                } satisfies SecurityRuleContext);
+
+                errorEmitter.emit('permission-error', permissionError);
+            });
+
+        toast({
+            title: "Node Created",
+            description: `The node "${nodeName}" has been successfully added.`,
+        });
+        router.push('/nodes');
+
+    } catch (e) {
+        console.error("Error adding document: ", e);
+        toast({
+            variant: "destructive",
+            title: "Creation Failed",
+            description: "An unexpected error occurred while creating the node.",
+        });
+        setIsSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -110,7 +205,6 @@ export default function CreateNodePage() {
         };
 
         const closeHandler = () => {
-          // Only update status if this is still the active WebSocket instance
           if (wsRef.current === newWs) {
             setConnectionStatus('Disconnected');
             setCpuInfo(null);
@@ -137,7 +231,7 @@ export default function CreateNodePage() {
         setCpuInfo(null);
       }
 
-    }, 1000); // 1-second debounce
+    }, 1000);
 
     return () => {
       clearTimeout(handler);
@@ -145,7 +239,6 @@ export default function CreateNodePage() {
   }, [fqdn]);
 
   useEffect(() => {
-    // Cleanup on component unmount
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
@@ -193,7 +286,6 @@ export default function CreateNodePage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          {/* Left Column */}
           <div className="lg:col-span-2 flex flex-col gap-8">
             <Card>
               <CardHeader className="flex flex-row items-center gap-3">
@@ -204,11 +296,11 @@ export default function CreateNodePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="node-name">Node Name</Label>
-                    <Input id="node-name" placeholder="e.g. node01.mars" />
+                    <Input id="node-name" placeholder="e.g. node01.mars" value={nodeName} onChange={(e) => setNodeName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="location">Location</Label>
-                    <Select>
+                    <Select value={location} onValueChange={setLocation}>
                       <SelectTrigger id="location">
                         <SelectValue placeholder="New York, USA (US-NYC-01)" />
                       </SelectTrigger>
@@ -232,10 +324,12 @@ export default function CreateNodePage() {
                     id="description"
                     placeholder="Briefly describe the purpose or physical location of this node."
                     rows={3}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
                 <div className="flex items-center space-x-3">
-                  <Switch id="public-node" />
+                  <Switch id="public-node" checked={isPublic} onCheckedChange={setIsPublic}/>
                   <div>
                     <Label htmlFor="public-node">Public Node</Label>
                     <p className="text-sm text-text-secondary">
@@ -288,13 +382,12 @@ export default function CreateNodePage() {
                             Secure the connection between the panel and daemon.
                           </p>
                       </div>
-                      <Switch id="ssl" defaultChecked className="ml-auto"/>
+                      <Switch id="ssl" checked={useSsl} onCheckedChange={setUseSsl} className="ml-auto"/>
                   </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column */}
           <div className="lg:col-span-1 flex flex-col gap-8 sticky top-24">
             <Card>
               <CardHeader className="flex flex-row items-center gap-3">
@@ -348,12 +441,23 @@ export default function CreateNodePage() {
             <Button variant="outline" asChild>
                 <Link href="/nodes">Cancel</Link>
             </Button>
-            <Button>
-              <Plus className="mr-2" />
-              Create Node
+            <Button onClick={handleCreateNode} disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <HelpCircle className="mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="mr-2" />
+                  Create Node
+                </>
+              )}
             </Button>
           </div>
         </div>
     </>
   );
 }
+
+    
