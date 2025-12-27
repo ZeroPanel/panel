@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Info, Server, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 
 type BackendType = "none" | "firebase" | "supabase" | "rest";
 
@@ -78,8 +79,10 @@ const databaseOptions: { id: BackendType; name: string; logo: React.ReactNode; }
   ];
 
 export function AdminForm() {
+  const [savedConfig, setSavedConfig] = useLocalStorage<AdminFormValues>("admin-config", defaultValues);
+
   const { control, handleSubmit, reset, setValue } = useForm<AdminFormValues>({
-    defaultValues: defaultValues,
+    defaultValues: savedConfig,
   });
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -130,6 +133,7 @@ export function AdminForm() {
 
   const onSubmit = async (data: AdminFormValues) => {
     setIsSubmitting(true);
+    setSavedConfig(data);
     
     if (data.backend === 'firebase' && data.enabled) {
         try {
@@ -164,8 +168,8 @@ export function AdminForm() {
         }
     } else {
          toast({
-            title: "Admin Configuration Action",
-            description: "No backend action taken. Save your configuration locally if needed.",
+            title: "Admin Configuration Saved",
+            description: "Your backend configuration has been saved locally.",
         });
         setIsSubmitting(false);
     }
@@ -300,5 +304,3 @@ export function AdminForm() {
     </form>
   );
 }
-
-    
