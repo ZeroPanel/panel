@@ -185,11 +185,15 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
   const cleanup = useCallback(() => {
     if (wsRef.current) {
+      // Prevent further events from firing
       wsRef.current.onopen = null;
       wsRef.current.onmessage = null;
       wsRef.current.onclose = null;
       wsRef.current.onerror = null;
-      wsRef.current.close();
+      
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
+      }
       wsRef.current = null;
     }
     if (healthCheckIntervalRef.current) {
@@ -204,7 +208,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
   const connect = useCallback(() => {
     if (!node.ip || wsRef.current) return;
-
+    
     cleanup();
     setStatus('Connecting');
 
@@ -251,6 +255,10 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     };
 
     const handleCloseOrError = () => {
+      // Only proceed if this WebSocket is still the current one
+      if (wsRef.current !== ws) {
+        return;
+      }
       console.log(`WebSocket disconnected from ${node.ip}`);
       cleanup();
       setStatus('Offline');
@@ -272,6 +280,8 @@ const NodeDataRow = ({ node }: { node: Node }) => {
       return;
     }
     connect();
+    // This return function is the cleanup function for the useEffect hook.
+    // It's called when the component unmounts.
     return () => {
       cleanup();
     };
