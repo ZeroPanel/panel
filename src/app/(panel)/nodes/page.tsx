@@ -44,7 +44,7 @@ import { useFirestore, useCollection } from '@/firebase';
 import { collection, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 
-type NodeStatus = 'Online' | 'Offline' | 'Maint.';
+type NodeStatus = 'Online' | 'Offline' | 'Maint.' | 'Connecting';
 
 type Node = {
   id: string;
@@ -143,6 +143,12 @@ const statusStyles: Record<
     bg: 'bg-amber-500/10',
     dot: 'bg-amber-500',
   },
+  Connecting: {
+    icon: <Power size={14} />,
+    text: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    dot: 'bg-amber-500 animate-pulse',
+  },
 };
 
 const filterPills = [
@@ -169,12 +175,15 @@ function transformFirestoreData(doc: DocumentData): Node {
     };
 }
 
-
-const NodeStatusCell = ({ node }: { node: Node }) => {
-  const [status, setStatus] = useState<NodeStatus>(node.status);
+const NodeDataRow = ({ node }: { node: Node }) => {
+  const [currentNode, setCurrentNode] = useState<Node>(node);
+  const [status, setStatus] = useState<NodeStatus>('Connecting');
 
   useEffect(() => {
-    if (!node.ip) return;
+    if (!node.ip) {
+      setStatus('Offline');
+      return;
+    }
 
     const ws = new WebSocket(`wss://${node.ip}/health`);
     
@@ -188,8 +197,9 @@ const NodeStatusCell = ({ node }: { node: Node }) => {
             if (data.status && ['Online', 'Offline', 'Maint.'].includes(data.status)) {
                 setStatus(data.status);
             }
+             // You could update other node properties here from the WS message
+            setCurrentNode(prev => ({ ...prev, ...data }));
         } catch (e) {
-            // Not a JSON message, might be a simple status string
              if (['Online', 'Offline', 'Maint.'].includes(event.data)) {
                 setStatus(event.data);
             }
@@ -208,24 +218,122 @@ const NodeStatusCell = ({ node }: { node: Node }) => {
       ws.close();
     };
   }, [node.ip]);
-  
+
   const statusConfig = statusStyles[status];
+  const isOnline = status === 'Online';
 
   return (
-    <TableCell>
-      <div
-        className={cn(
-          'flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium w-fit',
-          statusConfig.bg,
-          statusConfig.text
+    <TableRow>
+      <TableCell>
+        <div className="font-medium text-white">{currentNode.name}</div>
+        <div className="text-sm text-text-secondary font-mono">
+          {currentNode.ip}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{currentNode.location.flag}</span>
+          <span className="text-text-secondary">
+            {currentNode.location.city}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div
+            className={cn(
+            'flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium w-fit',
+            statusConfig.bg,
+            statusConfig.text
+            )}
+        >
+            <span
+            className={cn('size-2 rounded-full', statusConfig.dot)}
+            />
+            {status}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          {isOnline && currentNode.cpu !== null ? (
+            <>
+              <span
+                className={cn(
+                  'w-8 text-right font-medium',
+                  currentNode.cpu > 80
+                    ? 'text-amber-400'
+                    : 'text-white'
+                )}
+              >
+                {currentNode.cpu}%
+              </span>
+              <Progress
+                value={currentNode.cpu}
+                className={cn(
+                  'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
+                  currentNode.cpu > 80 && '[&>div]:bg-amber-500'
+                )}
+              />
+            </>
+          ) : (
+            <span className="text-text-secondary">-</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-3">
+          {isOnline && currentNode.ram ? (
+            <>
+              <span className="text-white font-medium w-24">
+                {currentNode.ram.current}GB / {currentNode.ram.max}GB
+              </span>
+              <Progress
+                value={(currentNode.ram.current / currentNode.ram.max) * 100}
+                className="h-1.5 w-24 bg-background-dark [&>div]:bg-purple-500"
+              />
+            </>
+          ) : (
+            <span className="text-text-secondary">-</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell>
+        {isOnline && currentNode.disk ? (
+          currentNode.disk.isUsage ? (
+             <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    'w-8 text-right font-medium',
+                    currentNode.disk.current > 90
+                      ? 'text-rose-400'
+                      : 'text-white'
+                  )}
+                >
+                  {currentNode.disk.current}%
+                </span>
+                <Progress
+                  value={currentNode.disk.current as number}
+                  className={cn(
+                    'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
+                    (currentNode.disk.current as number) > 90 && '[&>div]:bg-rose-500'
+                  )}
+                />
+             </div>
+          ) : (
+            <span className="text-white font-medium">
+              {currentNode.disk.current}
+              {currentNode.disk.unit}
+            </span>
+          )
+        ) : (
+          <span className="text-text-secondary">-</span>
         )}
-      >
-        <span
-          className={cn('size-2 rounded-full', statusConfig.dot)}
-        />
-        {status}
-      </div>
-    </TableCell>
+      </TableCell>
+      <TableCell className="text-right">
+        <Button variant="ghost" size="icon">
+          <MoreVertical className="h-5 w-5 text-text-secondary" />
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 };
 
@@ -364,108 +472,9 @@ export default function NodesPage() {
                     <TableCell colSpan={7} className="text-center text-text-secondary">Loading nodes from Firestore...</TableCell>
                 </TableRow>
             )}
-            { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => {
-              return (
-                <TableRow key={node.id}>
-                  <TableCell>
-                    <div className="font-medium text-white">{node.name}</div>
-                    <div className="text-sm text-text-secondary font-mono">
-                      {node.ip}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{node.location.flag}</span>
-                      <span className="text-text-secondary">
-                        {node.location.city}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <NodeStatusCell node={node} />
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {node.cpu !== null ? (
-                        <>
-                          <span
-                            className={cn(
-                              'w-8 text-right font-medium',
-                              node.cpu > 80
-                                ? 'text-amber-400'
-                                : 'text-white'
-                            )}
-                          >
-                            {node.cpu}%
-                          </span>
-                          <Progress
-                            value={node.cpu}
-                            className={cn(
-                              'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
-                              node.cpu > 80 && '[&>div]:bg-amber-500'
-                            )}
-                          />
-                        </>
-                      ) : (
-                        <span className="text-text-secondary">-</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {node.ram ? (
-                        <>
-                          <span className="text-white font-medium w-24">
-                            {node.ram.current}GB / {node.ram.max}GB
-                          </span>
-                          <Progress
-                            value={(node.ram.current / node.ram.max) * 100}
-                            className="h-1.5 w-24 bg-background-dark [&>div]:bg-purple-500"
-                          />
-                        </>
-                      ) : (
-                        <span className="text-text-secondary">-</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {node.disk ? (
-                      node.disk.isUsage ? (
-                         <div className="flex items-center gap-3">
-                            <span
-                              className={cn(
-                                'w-8 text-right font-medium',
-                                node.disk.current > 90
-                                  ? 'text-rose-400'
-                                  : 'text-white'
-                              )}
-                            >
-                              {node.disk.current}%
-                            </span>
-                            <Progress
-                              value={node.disk.current as number}
-                              className={cn(
-                                'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
-                                (node.disk.current as number) > 90 && '[&>div]:bg-rose-500'
-                              )}
-                            />
-                         </div>
-                      ) : (
-                        <span className="text-white font-medium">
-                          {node.disk.current}
-                          {node.disk.unit}
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-text-secondary">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-5 w-5 text-text-secondary" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => (
+                <NodeDataRow key={node.id} node={node} />
+            ))}
              { !loading && paginatedNodes.length === 0 && (
                 <TableRow>
                     <TableCell colSpan={7} className="text-center text-text-secondary h-24">
