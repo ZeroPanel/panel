@@ -2,6 +2,7 @@
 
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import React, { createContext, useContext, ReactNode } from 'react';
+import { FirebaseClientProvider } from "@/firebase/client-provider";
 
 type AdminConfig = {
   backend: string;
