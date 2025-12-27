@@ -86,12 +86,45 @@ export function AdminForm() {
   const watchedBackend = useWatch({ control, name: "backend" });
   const isEnabled = useWatch({ control, name: "enabled" });
 
-  const onSubmit = (data: AdminFormValues) => {
+  const onSubmit = async (data: AdminFormValues) => {
     setSavedConfig(data);
-    toast({
-      title: "Admin Configuration Saved",
-      description: "Your backend configuration has been saved locally.",
-    });
+
+    if (data.backend === 'firebase' && data.enabled) {
+        try {
+            const response = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: data.config.firebase }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update config file.');
+            }
+
+            toast({
+                title: "Firebase Config Updated",
+                description: "The Firebase configuration has been saved. Reloading the site...",
+            });
+
+            // Reload the page to apply the new server-side config
+            setTimeout(() => window.location.reload(), 2000);
+
+        } catch (error) {
+            console.error('Error saving Firebase config:', error);
+            const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+            toast({
+                variant: 'destructive',
+                title: "Error Saving Config",
+                description: errorMessage,
+            });
+        }
+    } else {
+         toast({
+            title: "Admin Configuration Saved",
+            description: "Your backend configuration has been saved locally.",
+        });
+    }
   };
 
   const connectionStatus = isEnabled && watchedBackend !== 'none' ? "Connected" : "Disabled";
@@ -112,7 +145,7 @@ export function AdminForm() {
             <Info className="h-4 w-4" />
             <AlertTitle>Developer Note</AlertTitle>
             <AlertDescription>
-              This panel is for debug purposes. Backend integration is not yet implemented, and this configuration is only saved to your browser's local storage.
+              This panel is for debug purposes. Saving the Firebase config writes to the filesystem and reloads the app. This feature is disabled in production.
             </AlertDescription>
           </Alert>
 
