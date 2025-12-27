@@ -30,6 +30,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Cpu,
   Fingerprint,
   HardDrive,
   HelpCircle,
@@ -50,6 +51,7 @@ type SystemInfo = {
     data: {
         storage: { total: number };
         ram: { total: number };
+        cpu: { model: string; count: number };
     };
 };
 
@@ -59,6 +61,7 @@ export default function CreateNodePage() {
   const wsRef = useRef<WebSocket | null>(null);
   const [totalMemory, setTotalMemory] = useState('16384');
   const [totalDisk, setTotalDisk] = useState('512000');
+  const [cpuInfo, setCpuInfo] = useState<{ model: string; count: number } | null>(null);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -67,6 +70,8 @@ export default function CreateNodePage() {
         wsRef.current.close();
         wsRef.current = null;
       }
+      
+      setCpuInfo(null);
 
       if (!fqdn) {
         setConnectionStatus('Disconnected');
@@ -96,6 +101,7 @@ export default function CreateNodePage() {
                 const diskMb = Math.round(messageData.data.storage.total / (1024 * 1024));
                 setTotalMemory(memoryMb.toString());
                 setTotalDisk(diskMb.toString());
+                setCpuInfo(messageData.data.cpu);
             }
           } catch (e) {
             console.log("WebSocket message received (not JSON):", event.data);
@@ -106,6 +112,7 @@ export default function CreateNodePage() {
           // Only update status if this is still the active WebSocket instance
           if (wsRef.current === newWs) {
             setConnectionStatus('Disconnected');
+            setCpuInfo(null);
           }
         };
         
@@ -113,6 +120,7 @@ export default function CreateNodePage() {
           console.error('WebSocket Error:', error);
           if (wsRef.current === newWs) {
             setConnectionStatus('Error');
+            setCpuInfo(null);
           }
           newWs.close();
         };
@@ -125,6 +133,7 @@ export default function CreateNodePage() {
       } catch (e) {
         console.error("Failed to create WebSocket:", e);
         setConnectionStatus('Error');
+        setCpuInfo(null);
       }
 
     }, 1000); // 1-second debounce
@@ -258,6 +267,15 @@ export default function CreateNodePage() {
                   address can technically be used but is not recommended for SSL.
                 </p>
               </div>
+                {cpuInfo && connectionStatus === 'Connected' && (
+                    <div className="p-4 bg-card-dark border border-border-dark rounded-lg flex items-center gap-4">
+                        <Cpu className="text-blue-400" size={32} />
+                        <div>
+                            <p className="text-white font-medium">{cpuInfo.model}</p>
+                            <p className="text-sm text-text-secondary">{cpuInfo.count} Cores</p>
+                        </div>
+                    </div>
+                )}
                  <div className="flex items-center space-x-3 p-4 bg-card-dark border border-border-dark rounded-lg">
                     <div className="p-2 bg-blue-500/20 text-blue-400 rounded-md">
                         <Share size={20} />
