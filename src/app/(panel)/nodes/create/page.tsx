@@ -40,6 +40,7 @@ import {
   Share,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -190,7 +191,7 @@ export default function CreateNodePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start pb-24">
         {/* Left Column */}
         <div className="lg:col-span-2 flex flex-col gap-8">
           <Card>
@@ -340,7 +341,7 @@ export default function CreateNodePage() {
         </div>
       </div>
 
-       <div className="py-4 border-t border-border-dark flex items-center justify-between sticky bottom-0 bg-background z-10">
+       <div className="py-4 border-t border-border-dark flex items-center justify-between sticky bottom-0 bg-background z-10 px-8 -mx-8">
           <p className="text-sm text-text-secondary">Changes are not saved until you click create.</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>

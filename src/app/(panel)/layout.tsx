@@ -9,7 +9,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           <AppSidebar />
           <div className="flex flex-1 flex-col h-full overflow-hidden relative">
               <Header />
-              <main className="flex-1 overflow-y-auto p-4 md:p-8">
+              <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">
                   {children}
               </main>
           </div>
