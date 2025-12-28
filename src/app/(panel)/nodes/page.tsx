@@ -376,7 +376,7 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
         <div className="flex items-center gap-3">
           {isOnline && currentNode.ram ? (
             <>
-              <div className="hidden sm:flex items-center gap-3 w-[120px]">
+              <div className="hidden lg:flex items-center gap-3 w-[120px]">
                 <MemoryStick size={16} className='text-purple-400' />
                 <Progress
                   value={ramUsage}
@@ -395,7 +395,7 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
       <TableCell>
         {diskUsage !== null ? (
              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-3 w-[120px]">
+                <div className="hidden lg:flex items-center gap-3 w-[120px]">
                     <HardDrive size={16} className='text-blue-400' />
                     <Progress
                         value={diskUsage}
@@ -639,7 +639,7 @@ export default function NodesPage() {
           <TableBody>
             { (isFirebaseEnabled && loading) && (
                 <TableRow>
-                    <TableCell colSpan={7} className="text-center text-text-secondary">Loading nodes from Firestore...</TableCell>
+                    <TableCell colSpan={6} className="text-center text-text-secondary">Loading nodes from Firestore...</TableCell>
                 </TableRow>
             )}
             { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => (
@@ -647,7 +647,7 @@ export default function NodesPage() {
             ))}
              { !loading && paginatedNodes.length === 0 && (
                 <TableRow>
-                    <TableCell colSpan={7} className="text-center text-text-secondary h-24">
+                    <TableCell colSpan={6} className="text-center text-text-secondary h-24">
                         No nodes found. <Link href="/nodes/create" className="text-primary hover:underline">Add nodes</Link> by creating new ones.
                     </TableCell>
                 </TableRow>
