@@ -93,9 +93,10 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [cpuLoad, setCpuLoad] = useState(0);
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
-
-  const shellWsRef = useRef<WebSocket | null>(null);
-  const healthWsRef = useRef<WebSocket | null>(null);
+  
+  const wsRef = useRef<WebSocket | null>(null);
+  const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const logsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (containerSnapshot?.exists()) {
@@ -117,20 +118,35 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     }
   }, [nodeSnapshot]);
 
-  // WebSocket for health/stats
+  // WebSocket for health/stats and logs
   useEffect(() => {
     if (!nodeIp || !container?.containerId) return;
 
-    const connectHealth = () => {
-      healthWsRef.current = new WebSocket(`wss://${nodeIp}/health`);
+    const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+    const connect = () => {
+      wsRef.current = new WebSocket(wsUrl);
 
-      healthWsRef.current.onopen = () => {
-        console.log(`Health WS connected to ${nodeIp}`);
-        healthWsRef.current?.send(JSON.stringify({ type: 'container_health', containerId: container.containerId }));
+      wsRef.current.onopen = () => {
+        console.log(`WS connected to ${wsUrl}`);
+        setLogs([{ time: new Date().toLocaleTimeString('en-GB'), level: 'SUCCESS', message: `Connected to container ${container.name}` }]);
+        
+        // Start polling for health and logs
+        healthIntervalRef.current = setInterval(() => {
+          wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
+        }, 5000); // Health every 5s
+
+        logsIntervalRef.current = setInterval(() => {
+            wsRef.current?.send(JSON.stringify({ type: 'logs' }));
+        }, 5000); // Logs every 5s
+
+        // Initial fetch
+        wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
+        wsRef.current?.send(JSON.stringify({ type: 'logs' }));
       };
 
-      healthWsRef.current.onmessage = (event) => {
+      wsRef.current.onmessage = (event) => {
         const data = JSON.parse(event.data);
+
         if (data.type === 'container_health_response') {
           setCpuLoad(Math.round(data.cpu.usage));
           const ramCurrent = data.memory.usage / (1024 * 1024); // MB
@@ -142,67 +158,43 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
           const m = Math.floor(uptimeSeconds % 3600 / 60);
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
+        } else if (data.type === 'logs_response' && Array.isArray(data.logs)) {
+            const newLogs: LogEntry[] = data.logs.map((log: string) => ({
+                time: new Date().toLocaleTimeString('en-GB'),
+                level: 'INFO', // Or parse from log string if possible
+                message: log,
+            }));
+            setLogs(prev => [...prev, ...newLogs]);
         }
       };
 
-      healthWsRef.current.onclose = () => {
-        console.log('Health WS disconnected');
-        setTimeout(connectHealth, 5000);
-      };
-
-      healthWsRef.current.onerror = (err) => {
-        console.error('Health WS error:', err);
-        healthWsRef.current?.close();
-      };
-    };
-
-    connectHealth();
-
-    return () => healthWsRef.current?.close();
-  }, [nodeIp, container?.containerId]);
-
-  // WebSocket for shell/logs
-  useEffect(() => {
-    if (!nodeIp || !container?.containerId) return;
-
-    const connectShell = () => {
-      shellWsRef.current = new WebSocket(`wss://${nodeIp}/shell`);
-      
-      shellWsRef.current.onopen = () => {
-        console.log(`Shell WS connected to ${nodeIp}`);
-        shellWsRef.current?.send(JSON.stringify({ type: 'attach', containerId: container.containerId }));
-        setLogs([{ time: new Date().toLocaleTimeString('en-GB'), level: 'SUCCESS', message: `Connected to container ${container.name}` }]);
-      };
-
-      shellWsRef.current.onmessage = (event) => {
-        setLogs(prev => [...prev, {
-          time: new Date().toLocaleTimeString('en-GB'),
-          level: 'INFO', // Or parse level from message
-          message: event.data,
-        }]);
-      };
-
-      shellWsRef.current.onclose = () => {
-        console.log('Shell WS disconnected');
+      wsRef.current.onclose = () => {
+        console.log('WS disconnected');
+        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+        if (logsIntervalRef.current) clearInterval(logsIntervalRef.current);
         setLogs(prev => [...prev, { time: new Date().toLocaleTimeString('en-GB'), level: 'ERROR', message: 'Disconnected from container.' }]);
-        setTimeout(connectShell, 5000);
+        setTimeout(connect, 5000);
       };
 
-      shellWsRef.current.onerror = (err) => {
-        console.error('Shell WS error:', err);
-        shellWsRef.current?.close();
+      wsRef.current.onerror = (err) => {
+        console.error('WS error:', err);
+        wsRef.current?.close();
       };
     };
 
-    connectShell();
+    connect();
 
-    return () => shellWsRef.current?.close();
+    return () => {
+        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+        if (logsIntervalRef.current) clearInterval(logsIntervalRef.current);
+        wsRef.current?.close();
+    }
   }, [nodeIp, container?.containerId, container?.name]);
 
 
   const handleSendCommand = () => {
-    if (command.trim() && shellWsRef.current?.readyState === WebSocket.OPEN) {
-      shellWsRef.current.send(JSON.stringify({ type: 'command', command: command + '\n' }));
+    if (command.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'command', command: command + '\n' }));
       setLogs([...logs, {
         time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
         level: 'INPUT',
@@ -369,3 +361,5 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
+    

@@ -75,7 +75,7 @@ export function ContainerCard({ container }: { container: Container }) {
             try {
                 const data = JSON.parse(event.data);
                 if (data.type === 'container_status' && data.status) {
-                     const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+                     const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
                      setCurrentStatus(newStatus);
                 }
             } catch (e) {
