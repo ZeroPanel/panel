@@ -153,12 +153,12 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           const m = Math.floor(uptimeSeconds % 3600 / 60);
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
         } else if (data.type === 'container_exec_output') {
-          const newLog: LogEntry = {
-              time: new Date().toLocaleTimeString('en-GB'),
-              level: 'INFO',
-              message: data.data,
-          };
-          setLogs(prev => [...prev, newLog]);
+            const newLog: LogEntry = {
+                time: new Date().toLocaleTimeString('en-GB'),
+                level: 'INFO',
+                message: data.data,
+            };
+            setLogs(prev => [...prev, newLog]);
         } else if (data.log) { // Handle unsolicited log messages
             const newLog: LogEntry = {
                 time: new Date().toLocaleTimeString('en-GB'),
@@ -229,7 +229,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 h-[calc(100vh-10rem)]">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -309,7 +309,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
       {/* Server Console */}
       <Card className="bg-card-dark border-border-dark flex flex-col flex-grow">
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader className="flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Terminal className="size-5 text-primary" />
             <CardTitle>Server Console</CardTitle>
@@ -341,7 +341,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             ))}
           </pre>
         </CardContent>
-        <div className="flex items-center gap-2 p-4 border-t border-border-dark bg-card-dark rounded-b-lg">
+        <div className="flex items-center gap-2 p-4 border-t border-border-dark bg-card-dark rounded-b-lg shrink-0">
           <span className="text-green-400 font-code">root@server:~#</span>
           <Input
             placeholder="Type a command..."
@@ -360,3 +360,5 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
+    
