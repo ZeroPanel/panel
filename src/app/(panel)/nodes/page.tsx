@@ -184,15 +184,24 @@ const NodeDataRow = ({ node }: { node: Node }) => {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    if (!node.ip || (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)) {
-      if (!node.ip) setStatus('Offline');
+    if (!node.ip) {
+      setStatus('Offline');
       return;
     }
   
-    setStatus('Connecting');
+    // Clean up existing connection before creating a new one
     if (wsRef.current) {
-        wsRef.current.close();
+      wsRef.current.onclose = null; // Prevent onclose from triggering reconnect
+      wsRef.current.onerror = null;
+      wsRef.current.close();
     }
+    
+    // Clear any pending reconnection attempts
+    if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+    }
+
+    setStatus('Connecting');
 
     const ws = new WebSocket(`wss://${node.ip}/health`);
     wsRef.current = ws;
@@ -200,21 +209,20 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     const clearTimers = () => {
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         pingIntervalRef.current = null;
         timeoutRef.current = null;
-        reconnectTimeoutRef.current = null;
     };
     
     const setupPing = () => {
         clearTimers();
         pingIntervalRef.current = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'health' }));
+            if (wsRef.current?.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({ type: 'health' }));
 
                 timeoutRef.current = setTimeout(() => {
-                    setStatus('Offline');
-                    ws.close(); // This will trigger onclose and schedule a reconnect
+                    if(wsRef.current === ws) { // Ensure we are timing out the correct socket
+                      ws.close(); // This will trigger onclose and schedule a reconnect
+                    }
                 }, 30000); 
             }
         }, 30000);
@@ -222,15 +230,17 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
     ws.onopen = () => {
         console.log(`WebSocket connected to ${node.ip}`);
+        if(wsRef.current !== ws) return; // Connection is already stale
+
         ws.send(JSON.stringify({ type: 'health' }));
         timeoutRef.current = setTimeout(() => {
-            setStatus('Offline');
-            ws.close();
+          if(wsRef.current === ws) ws.close();
         }, 30000);
     };
 
     ws.onmessage = (event) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if(wsRef.current !== ws) return; 
 
         try {
             const data = JSON.parse(event.data);
@@ -266,8 +276,10 @@ const NodeDataRow = ({ node }: { node: Node }) => {
         }
     };
     
-    const handleCloseOrError = () => {
-        console.log(`WebSocket disconnected from ${node.ip}`);
+    const handleCloseOrError = (event: Event) => {
+        console.log(`WebSocket disconnected from ${node.ip}.`, event);
+        if (wsRef.current !== ws) return; // An old socket's event, ignore.
+
         clearTimers();
         setStatus('Offline');
         
@@ -275,7 +287,8 @@ const NodeDataRow = ({ node }: { node: Node }) => {
             clearTimeout(reconnectTimeoutRef.current);
         }
         reconnectTimeoutRef.current = setTimeout(() => {
-            if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+            // Only reconnect if this is still the active socket instance
+            if (wsRef.current === ws) {
                 connect();
             }
         }, 60000); // 1 minute delay
@@ -283,6 +296,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
     ws.onclose = handleCloseOrError;
     ws.onerror = handleCloseOrError;
+
   }, [node.ip]);
 
   useEffect(() => {
@@ -295,6 +309,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
             wsRef.current.onclose = null;
             wsRef.current.onerror = null;
             wsRef.current.close();
+            wsRef.current = null;
         }
     };
   }, [connect]);
