@@ -47,7 +47,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { useAppState } from '@/components/app-state-provider';
 
-type Node = { id: string, name: string };
+type Node = { id: string, name: string, ip: string };
 type User = { id: string, name: string };
 
 export default function CreateContainerPage() {
@@ -63,6 +63,10 @@ export default function CreateContainerPage() {
   const [publicPort, setPublicPort] = useState('');
   const [privatePort, setPrivatePort] = useState('');
   const [description, setDescription] = useState('');
+  
+  const [cpuLimit, setCpuLimit] = useState('');
+  const [memoryLimit, setMemoryLimit] = useState('');
+  const [diskLimit, setDiskLimit] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -79,6 +83,7 @@ export default function CreateContainerPage() {
       const fetchedNodes = nodesSnapshot.docs.map(doc => ({
         id: doc.id,
         name: doc.data().name,
+        ip: doc.data().ip,
       }));
       setNodes(fetchedNodes);
       if (fetchedNodes.length > 0 && !node) {
@@ -135,6 +140,49 @@ export default function CreateContainerPage() {
         ports: publicPort && privatePort ? [{ public: Number(publicPort), private: Number(privatePort) }] : [],
         createdAt: serverTimestamp(),
     };
+
+    // WebSocket communication to the node
+    if (selectedNode?.ip) {
+        const ws = new WebSocket(`wss://${selectedNode.ip}/create`);
+        ws.onopen = () => {
+            const payload = {
+                type: 'create_container',
+                name: containerName,
+                image: dockerImage,
+                ports: publicPort && privatePort ? [{ public: Number(publicPort), private: Number(privatePort) }] : [],
+                resources: {
+                    cpuLimit: cpuLimit ? Number(cpuLimit) : null,
+                    memoryLimit: memoryLimit ? Number(memoryLimit) : null,
+                    diskLimit: diskLimit ? Number(diskLimit) : null,
+                },
+                user: assignedUser,
+                description,
+            };
+            ws.send(JSON.stringify(payload));
+            console.log('Container creation request sent to node:', payload);
+        };
+        ws.onmessage = (event) => {
+            console.log('Message from node:', event.data);
+            // You can add logic here to handle responses from the node, e.g., deployment status
+        };
+        ws.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            toast({
+                variant: 'destructive',
+                title: 'Node Connection Failed',
+                description: `Could not connect to the deployment node ${selectedNode.name}. The container record was saved, but deployment may not have started.`
+            });
+        };
+        ws.onclose = () => {
+            console.log(`Connection to node ${selectedNode.name} closed.`);
+        };
+    } else {
+        toast({
+            variant: 'warning',
+            title: 'Node IP Missing',
+            description: 'The selected node does not have an IP address configured. Cannot initiate deployment.'
+        });
+    }
 
     try {
       const containersCollection = collection(firestore, 'containers');
@@ -285,15 +333,15 @@ export default function CreateContainerPage() {
             <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
                  <div className="space-y-2">
                     <Label htmlFor="cpu-limit">CPU Limit (%)</Label>
-                    <Input id="cpu-limit" placeholder="100" />
+                    <Input id="cpu-limit" placeholder="100" value={cpuLimit} onChange={e => setCpuLimit(e.target.value)} />
                   </div>
                    <div className="space-y-2">
                     <Label htmlFor="memory-limit">Memory Limit (MB)</Label>
-                    <Input id="memory-limit" placeholder="512" />
+                    <Input id="memory-limit" placeholder="512" value={memoryLimit} onChange={e => setMemoryLimit(e.target.value)} />
                   </div>
                    <div className="space-y-2">
                     <Label htmlFor="disk-limit">Storage Limit (MB)</Label>
-                    <Input id="disk-limit" placeholder="1024" />
+                    <Input id="disk-limit" placeholder="1024" value={diskLimit} onChange={e => setDiskLimit(e.target.value)} />
                   </div>
             </CardContent>
         </Card>
