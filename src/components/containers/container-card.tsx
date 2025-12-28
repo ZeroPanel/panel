@@ -54,10 +54,15 @@ export function ContainerCard({ container }: { container: Container }) {
     }, [nodeSnapshot]);
 
     useEffect(() => {
-        // Only connect if we have the required info and there isn't already a connection
-        if (!nodeIp || !container.containerId || healthWsRef.current) return;
+        if (!nodeIp || !container.containerId) return;
 
         const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+        
+        // Prevent re-creating the connection if it's already open or connecting
+        if (healthWsRef.current && healthWsRef.current.readyState < 2) {
+            return;
+        }
+
         const ws = new WebSocket(wsUrl);
         healthWsRef.current = ws;
 
@@ -72,11 +77,6 @@ export function ContainerCard({ container }: { container: Container }) {
                 if (data.type === 'container_status' && data.status) {
                      const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
                      setCurrentStatus(newStatus);
-                     // If we get a stable status, we can close the connection
-                     if (newStatus !== 'Starting') {
-                        ws.close();
-                        healthWsRef.current = null;
-                     }
                 }
             } catch (e) {
                  console.error("Failed to parse status message:", e);
@@ -90,18 +90,29 @@ export function ContainerCard({ container }: { container: Container }) {
 
         ws.onerror = (err) => {
             console.error('Status WS error:', err);
-            // The onclose event will be fired after an error, so cleanup happens there.
         };
         
-        // Cleanup function to close the WebSocket when the component unmounts
         return () => {
             if (healthWsRef.current) {
                 healthWsRef.current.close();
-                healthWsRef.current = null;
             }
         };
 
     }, [nodeIp, container.containerId, container.name]);
+
+    const handleControlClick = (event: 'start' | 'stop' | 'restart') => {
+        if (healthWsRef.current && healthWsRef.current.readyState === WebSocket.OPEN) {
+            healthWsRef.current.send(JSON.stringify({ event }));
+            // Optimistically update status for better UX
+            if (event === 'start' || event === 'restart') {
+                setCurrentStatus('Starting');
+            }
+        } else {
+            console.warn('WebSocket is not connected. Cannot send command.');
+            // Optional: You could add a toast notification here to inform the user.
+        }
+    };
+
 
     const statusConfig = statusStyles[currentStatus];
 
@@ -152,13 +163,13 @@ export function ContainerCard({ container }: { container: Container }) {
             {/* Actions Footer */}
             <div className="mt-auto p-3 bg-background/30 border-t border-border flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Start" disabled={currentStatus !== 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Start" disabled={currentStatus !== 'Stopped'} onClick={() => handleControlClick('start')}>
                         <Play size={20} className="fill-current"/>
                     </Button>
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-rose-400 hover:text-rose-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Stop" disabled={currentStatus === 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-rose-400 hover:text-rose-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Stop" disabled={currentStatus === 'Stopped'} onClick={() => handleControlClick('stop')}>
                         <StopCircle size={20} className="fill-current"/>
                     </Button>
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Restart" disabled={currentStatus === 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Restart" disabled={currentStatus === 'Stopped'} onClick={() => handleControlClick('restart')}>
                         <RefreshCw size={20} />
                     </Button>
                 </div>
