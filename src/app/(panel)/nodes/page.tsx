@@ -244,9 +244,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
                     newStatus = 'Offline';
                 }
 
-                if (status !== newStatus) {
-                    setStatus(newStatus);
-                }
+                setStatus(newStatus);
 
                 if (newStatus === 'Online') {
                     setupPing();
@@ -271,19 +269,21 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     const handleCloseOrError = () => {
         console.log(`WebSocket disconnected from ${node.ip}`);
         clearTimers();
-        if (status !== 'Offline') {
-            setStatus('Offline');
-        }
+        setStatus('Offline');
         
-        // Schedule a reconnect attempt after 30 seconds
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+        }
         reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-        }, 30000);
+            if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+                connect();
+            }
+        }, 60000); // 1 minute delay
     };
 
     ws.onclose = handleCloseOrError;
     ws.onerror = handleCloseOrError;
-  }, [node.ip, status]);
+  }, [node.ip]);
 
   useEffect(() => {
     connect();
@@ -292,6 +292,8 @@ const NodeDataRow = ({ node }: { node: Node }) => {
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (wsRef.current) {
+            wsRef.current.onclose = null;
+            wsRef.current.onerror = null;
             wsRef.current.close();
         }
     };
