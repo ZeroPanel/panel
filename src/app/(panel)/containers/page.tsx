@@ -39,6 +39,7 @@ export type Container = {
   nodeName?: string;
   cpuUsage: number;
   ramUsage: number;
+  containerId?: string;
 };
 
 function transformFirestoreData(doc: DocumentData): Container {
@@ -52,6 +53,7 @@ function transformFirestoreData(doc: DocumentData): Container {
     nodeName: data.nodeName || '',
     cpuUsage: data.cpuUsage || 0,
     ramUsage: data.ramUsage || 0,
+    containerId: data.containerId || '',
   };
 }
 

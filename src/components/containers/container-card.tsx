@@ -1,11 +1,14 @@
 
 'use client';
 
+import React, { useState, useEffect, useRef } from 'react';
 import type { Container } from '@/app/(panel)/containers/page';
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
 import { Box, Cpu, MemoryStick, Play, RefreshCw, StopCircle, Server, Trash2, Terminal } from "lucide-react";
 import Link from 'next/link';
+import { useFirestore, useDoc } from '@/firebase';
+import { doc } from 'firebase/firestore';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting';
 
@@ -36,7 +39,69 @@ const statusStyles: Record<ContainerStatus, {
 };
 
 export function ContainerCard({ container }: { container: Container }) {
-    const statusConfig = statusStyles[container.status];
+    const [currentStatus, setCurrentStatus] = useState<ContainerStatus>(container.status);
+    const healthWsRef = useRef<WebSocket | null>(null);
+    const firestore = useFirestore();
+
+    const nodeRef = firestore ? doc(firestore, 'nodes', container.node) : null;
+    const [nodeSnapshot] = useDoc(nodeRef);
+    const [nodeIp, setNodeIp] = useState<string | null>(null);
+    
+    useEffect(() => {
+        if (nodeSnapshot?.exists()) {
+          setNodeIp(nodeSnapshot.data().ip);
+        }
+    }, [nodeSnapshot]);
+
+    useEffect(() => {
+        if (currentStatus === 'Starting' && nodeIp && container.containerId) {
+            const connectHealth = () => {
+                healthWsRef.current = new WebSocket(`wss://${nodeIp}/health`);
+
+                healthWsRef.current.onopen = () => {
+                    console.log(`Health WS connected for ${container.name}`);
+                    healthWsRef.current?.send(JSON.stringify({ type: 'container_health', containerId: container.containerId }));
+                };
+
+                healthWsRef.current.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'container_health_response' && data.status) {
+                            const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+                             if (newStatus !== 'Starting') {
+                                setCurrentStatus(newStatus);
+                                healthWsRef.current?.close();
+                            }
+                        }
+                    } catch (e) {
+                         console.error("Failed to parse health message:", e);
+                    }
+                };
+
+                healthWsRef.current.onclose = () => {
+                    console.log(`Health WS disconnected for ${container.name}`);
+                    if (currentStatus === 'Starting') { // Only retry if still starting
+                        setTimeout(connectHealth, 5000);
+                    }
+                };
+
+                healthWsRef.current.onerror = (err) => {
+                    console.error('Health WS error:', err);
+                    healthWsRef.current?.close();
+                };
+            };
+            connectHealth();
+        }
+        
+        return () => {
+            if (healthWsRef.current) {
+                healthWsRef.current.close();
+            }
+        };
+
+    }, [currentStatus, nodeIp, container.containerId, container.name]);
+
+    const statusConfig = statusStyles[currentStatus];
 
     return (
         <div className="group flex flex-col bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-all duration-300 shadow-lg">
@@ -54,7 +119,7 @@ export function ContainerCard({ container }: { container: Container }) {
                         </div>
                     </div>
                     <div className={`px-2.5 py-1 rounded-md ${statusConfig.bg} border ${statusConfig.border} text-xs font-bold uppercase tracking-wide ${statusConfig.text}`}>
-                        {container.status}
+                        {currentStatus}
                     </div>
                 </div>
                 {/* Resources */}
@@ -85,13 +150,13 @@ export function ContainerCard({ container }: { container: Container }) {
             {/* Actions Footer */}
             <div className="mt-auto p-3 bg-background/30 border-t border-border flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Start" disabled={container.status !== 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Start" disabled={currentStatus !== 'Stopped'}>
                         <Play size={20} className="fill-current"/>
                     </Button>
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-rose-400 hover:text-rose-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Stop" disabled={container.status === 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-rose-400 hover:text-rose-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Stop" disabled={currentStatus === 'Stopped'}>
                         <StopCircle size={20} className="fill-current"/>
                     </Button>
-                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Restart" disabled={container.status === 'Stopped'}>
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-white/10 text-amber-400 hover:text-amber-300 transition-colors disabled:text-text-secondary disabled:bg-white/5 disabled:cursor-not-allowed" title="Restart" disabled={currentStatus === 'Stopped'}>
                         <RefreshCw size={20} />
                     </Button>
                 </div>
@@ -99,7 +164,7 @@ export function ContainerCard({ container }: { container: Container }) {
                     <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-rose-500/20 text-text-secondary hover:text-rose-400" title="Delete">
                         <Trash2 size={18} />
                     </Button>
-                     <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={container.status === 'Stopped'}>
+                     <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={currentStatus === 'Stopped'}>
                         <Link href={`/server/${container.id}/console`}>
                         <Terminal size={16} />
                         Console
