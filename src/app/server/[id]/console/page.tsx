@@ -19,45 +19,31 @@ import {
   Send,
   Terminal,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
+import { useFirestore, useDoc } from '@/firebase';
+import { doc, DocumentData } from 'firebase/firestore';
+import { useAppState } from '@/components/app-state-provider';
+import { cn } from '@/lib/utils';
 
 type LogEntry = {
   time: string;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS' | 'SERVER';
+  level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS' | 'SERVER' | 'INPUT';
   message: string;
 };
 
-const initialLogs: LogEntry[] = [
-  { time: '14:02:10', level: 'INFO', message: 'Starting minecraft server version 1.20.1' },
-  { time: '14:02:10', level: 'INFO', message: 'Loading properties' },
-  { time: '14:02:10', level: 'INFO', message: 'Default game type: SURVIVAL' },
-  { time: '14:02:10', level: 'INFO', message: 'Generating keypair' },
-  { time: '14:02:11', level: 'INFO', message: 'Starting Minecraft server on *:25565' },
-  { time: '14:02:11', level: 'INFO', message: 'Using default channel type' },
-  {
-    time: '14:02:15',
-    level: 'WARN',
-    message: 'Ambiguity between arguments [teleport, destination] and [teleport, targets) with inputs: [Player, 0123, @e, dd12be42-52a9-4a91-a8a1-11c01849e498]',
-  },
-  { time: '14:02:18', level: 'INFO', message: 'Preparing level "world"' },
-  { time: '14:02:20', level: 'INFO', message: 'Preparing start region for dimension minecraft:overworld' },
-  { time: '14:02:22', level: 'INFO', message: 'Time elapsed: 4215 ms' },
-  { time: '14:02:22', level: 'SUCCESS', message: 'Done (12.450s)! For help, type "help"' },
-  { time: '14:05:01', level: 'INFO', message: 'Player AdminUser joined the game' },
-  { time: '14:05:01', level: 'INFO', message: 'AdminUser[/127.0.0.1:54321] logged in with entity id 234 at (-120.5, 64.0, 201.3)' },
-  {
-    time: '14:10:45',
-    level: 'ERROR',
-    message: 'Could not pass event PlayerInteractEvent to Plugin v1.0\njava.lang.NullPointerException: null\nat com.example.plugin.Main.onInteract(Main.java:45)',
-  },
-  { time: '14:12:00', level: 'INFO', message: 'Saving...' },
-  { time: '14:12:01', level: 'INFO', message: 'Saved the game' },
-  { time: '14:15:22', level: 'INFO', message: 'Executing command: /say Hello World' },
-  { time: '14:15:22', level: 'SERVER', message: 'Hello World' },
-];
+type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
+
+type Container = {
+  id: string;
+  name: string;
+  node: string;
+  nodeName: string;
+  containerId: string;
+  status: ContainerStatus;
+};
 
 const levelStyles = {
   INFO: 'text-blue-400',
@@ -65,21 +51,159 @@ const levelStyles = {
   ERROR: 'text-red-400',
   SUCCESS: 'text-green-400',
   SERVER: 'text-purple-400',
+  INPUT: 'text-gray-400',
 };
 
+const statusStyles: Record<ContainerStatus, {
+    dot: string;
+    text: string;
+}> = {
+    Running: { dot: "bg-emerald-500", text: "text-emerald-400" },
+    Stopped: { dot: "bg-rose-500", text: "text-rose-400" },
+    Starting: { dot: "bg-amber-500", text: "text-amber-400" },
+    Building: { dot: "bg-amber-500", text: "text-amber-400" },
+};
+
+
 const ConsolePage = ({ params }: { params: { id: string } }) => {
-  const [logs, setLogs] = useState(initialLogs);
+  const { isFirebaseEnabled } = useAppState();
+  const firestore = isFirebaseEnabled ? useFirestore() : null;
+  
+  const containerRef = firestore ? doc(firestore, 'containers', params.id) : null;
+  const [containerSnapshot, containerLoading, containerError] = useDoc(containerRef);
+  
+  const [container, setContainer] = useState<Container | null>(null);
+
+  const nodeRef = useMemo(() => {
+    if (firestore && container?.node) {
+      return doc(firestore, 'nodes', container.node);
+    }
+    return null;
+  }, [firestore, container?.node]);
+  const [nodeSnapshot, nodeLoading, nodeError] = useDoc(nodeRef);
+  const [nodeIp, setNodeIp] = useState<string | null>(null);
+
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [command, setCommand] = useState('');
   const [filter, setFilter] = useState('All');
+  const [cpuLoad, setCpuLoad] = useState(0);
+  const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
+  const [uptime, setUptime] = useState('0h 0m');
+
+  const shellWsRef = useRef<WebSocket | null>(null);
+  const healthWsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    if (containerSnapshot?.exists()) {
+      const data = containerSnapshot.data() as DocumentData;
+      setContainer({
+        id: containerSnapshot.id,
+        name: data.name,
+        node: data.node,
+        nodeName: data.nodeName,
+        containerId: data.containerId,
+        status: data.status,
+      });
+    }
+  }, [containerSnapshot]);
+
+  useEffect(() => {
+    if (nodeSnapshot?.exists()) {
+      setNodeIp(nodeSnapshot.data().ip);
+    }
+  }, [nodeSnapshot]);
+
+  // WebSocket for health/stats
+  useEffect(() => {
+    if (!nodeIp || !container?.containerId) return;
+
+    const connectHealth = () => {
+      healthWsRef.current = new WebSocket(`wss://${nodeIp}/health`);
+
+      healthWsRef.current.onopen = () => {
+        console.log(`Health WS connected to ${nodeIp}`);
+        healthWsRef.current?.send(JSON.stringify({ type: 'container_health', containerId: container.containerId }));
+      };
+
+      healthWsRef.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'container_health_response') {
+          setCpuLoad(Math.round(data.cpu.usage));
+          const ramCurrent = data.memory.usage / (1024 * 1024); // MB
+          const ramMax = data.memory.limit / (1024 * 1024); // MB
+          setRamUsage({ current: ramCurrent, max: ramMax });
+          
+          const uptimeSeconds = data.uptime;
+          const d = Math.floor(uptimeSeconds / (3600*24));
+          const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
+          const m = Math.floor(uptimeSeconds % 3600 / 60);
+          setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
+        }
+      };
+
+      healthWsRef.current.onclose = () => {
+        console.log('Health WS disconnected');
+        setTimeout(connectHealth, 5000);
+      };
+
+      healthWsRef.current.onerror = (err) => {
+        console.error('Health WS error:', err);
+        healthWsRef.current?.close();
+      };
+    };
+
+    connectHealth();
+
+    return () => healthWsRef.current?.close();
+  }, [nodeIp, container?.containerId]);
+
+  // WebSocket for shell/logs
+  useEffect(() => {
+    if (!nodeIp || !container?.containerId) return;
+
+    const connectShell = () => {
+      shellWsRef.current = new WebSocket(`wss://${nodeIp}/shell`);
+      
+      shellWsRef.current.onopen = () => {
+        console.log(`Shell WS connected to ${nodeIp}`);
+        shellWsRef.current?.send(JSON.stringify({ type: 'attach', containerId: container.containerId }));
+        setLogs([{ time: new Date().toLocaleTimeString('en-GB'), level: 'SUCCESS', message: `Connected to container ${container.name}` }]);
+      };
+
+      shellWsRef.current.onmessage = (event) => {
+        setLogs(prev => [...prev, {
+          time: new Date().toLocaleTimeString('en-GB'),
+          level: 'INFO', // Or parse level from message
+          message: event.data,
+        }]);
+      };
+
+      shellWsRef.current.onclose = () => {
+        console.log('Shell WS disconnected');
+        setLogs(prev => [...prev, { time: new Date().toLocaleTimeString('en-GB'), level: 'ERROR', message: 'Disconnected from container.' }]);
+        setTimeout(connectShell, 5000);
+      };
+
+      shellWsRef.current.onerror = (err) => {
+        console.error('Shell WS error:', err);
+        shellWsRef.current?.close();
+      };
+    };
+
+    connectShell();
+
+    return () => shellWsRef.current?.close();
+  }, [nodeIp, container?.containerId, container?.name]);
+
 
   const handleSendCommand = () => {
-    if (command.trim()) {
-      const newLog: LogEntry = {
+    if (command.trim() && shellWsRef.current?.readyState === WebSocket.OPEN) {
+      shellWsRef.current.send(JSON.stringify({ type: 'command', command: command + '\n' }));
+      setLogs([...logs, {
         time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-        level: 'SERVER',
+        level: 'INPUT',
         message: command,
-      };
-      setLogs([...logs, newLog]);
+      }]);
       setCommand('');
     }
   };
@@ -93,6 +217,21 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const filteredLogs = logs.filter(
     (log) => filter === 'All' || log.level === filter.toUpperCase()
   );
+
+  if (containerLoading || nodeLoading) {
+    return <div className="text-center text-text-secondary">Loading console...</div>;
+  }
+  
+  if (containerError || nodeError) {
+    return <div className="text-center text-rose-400">Error loading data: {containerError?.message || nodeError?.message}</div>;
+  }
+
+  if (!container) {
+    return <div className="text-center text-text-secondary">Container not found.</div>;
+  }
+
+  const statusConfig = statusStyles[container.status];
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,7 +247,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>Minecraft SMP</BreadcrumbPage>
+                <BreadcrumbPage>{container.name}</BreadcrumbPage>
               </BreadcrumbItem>
                <BreadcrumbSeparator />
               <BreadcrumbItem>
@@ -117,10 +256,10 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             </BreadcrumbList>
           </Breadcrumb>
           <div className="flex items-center gap-2 mt-2">
-            <h1 className="text-2xl font-bold text-white">Minecraft SMP</h1>
-             <div className="px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-emerald-500"></span>
-                Running
+            <h1 className="text-2xl font-bold text-white">{container.name}</h1>
+             <div className={cn("px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5", statusConfig.text)}>
+                <span className={cn("size-1.5 rounded-full", statusConfig.dot)}></span>
+                {container.status}
             </div>
           </div>
         </div>
@@ -148,7 +287,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             <Cpu className="size-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12%</div>
+            <div className="text-2xl font-bold">{cpuLoad}%</div>
           </CardContent>
         </Card>
         <Card className="bg-card-dark border-border-dark">
@@ -158,7 +297,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              4.2 GB <span className="text-sm text-text-secondary">/ 8 GB</span>
+              {ramUsage.current.toFixed(0)} MB <span className="text-sm text-text-secondary">/ {ramUsage.max.toFixed(0)} MB</span>
             </div>
           </CardContent>
         </Card>
@@ -168,7 +307,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             <Clock className="size-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1d 08h 14m</div>
+            <div className="text-2xl font-bold">{uptime}</div>
           </CardContent>
         </Card>
       </div>
@@ -199,8 +338,8 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             {filteredLogs.map((log, index) => (
               <div key={index} className="flex gap-4">
                 <span className="text-text-secondary">[{log.time}]</span>
-                <span className={`${levelStyles[log.level]} font-bold`}>
-                  [{log.level}]
+                <span className={cn('font-bold', levelStyles[log.level])}>
+                  {log.level === 'INPUT' ? '>' : `[${log.level}]`}
                 </span>
                 <span className="flex-1 whitespace-pre-wrap">{log.message}</span>
               </div>
@@ -226,3 +365,4 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
