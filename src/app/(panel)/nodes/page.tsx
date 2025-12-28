@@ -189,16 +189,13 @@ const NodeDataRow = ({ node }: { node: Node }) => {
       return;
     }
   
-    // Clean up existing connection before creating a new one
-    if (wsRef.current) {
-      wsRef.current.onclose = null; // Prevent onclose from triggering reconnect
-      wsRef.current.onerror = null;
-      wsRef.current.close();
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      return; 
     }
     
-    // Clear any pending reconnection attempts
     if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
     }
 
     setStatus('Connecting');
@@ -220,8 +217,8 @@ const NodeDataRow = ({ node }: { node: Node }) => {
                 wsRef.current.send(JSON.stringify({ type: 'health' }));
 
                 timeoutRef.current = setTimeout(() => {
-                    if(wsRef.current === ws) { // Ensure we are timing out the correct socket
-                      ws.close(); // This will trigger onclose and schedule a reconnect
+                    if(wsRef.current === ws) {
+                      ws.close();
                     }
                 }, 30000); 
             }
@@ -230,7 +227,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
     ws.onopen = () => {
         console.log(`WebSocket connected to ${node.ip}`);
-        if(wsRef.current !== ws) return; // Connection is already stale
+        if(wsRef.current !== ws) return;
 
         ws.send(JSON.stringify({ type: 'health' }));
         timeoutRef.current = setTimeout(() => {
@@ -246,10 +243,10 @@ const NodeDataRow = ({ node }: { node: Node }) => {
             const data = JSON.parse(event.data);
             if (data.type === 'health_response') {
                 let newStatus: NodeStatus;
-                if (data.status === 'healthy') {
-                    newStatus = 'Online';
-                } else if (data.status === 'maintenance') {
+                if(data.maintenance?.enabled) {
                     newStatus = 'Maint.';
+                } else if (data.status === 'healthy') {
+                    newStatus = 'Online';
                 } else {
                     newStatus = 'Offline';
                 }
@@ -264,11 +261,16 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
                 setCurrentNode(prev => ({
                     ...prev,
-                    cpu: data.cpu?.usage ?? data.memory?.usage,
+                    cpu: data.memory?.usage, // Using memory usage for CPU as per new payload
                     ram: data.memory ? {
                         current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
                         max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
                     } : prev.ram,
+                    disk: data.storage ? {
+                        current: data.storage.percent,
+                        isUsage: true,
+                        unit: 'GB',
+                    } : prev.disk,
                 }));
             }
         } catch (e) {
@@ -278,20 +280,19 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     
     const handleCloseOrError = (event: Event) => {
         console.log(`WebSocket disconnected from ${node.ip}.`, event);
-        if (wsRef.current !== ws) return; // An old socket's event, ignore.
+        if (wsRef.current !== ws) return; 
 
         clearTimers();
         setStatus('Offline');
+        
+        setCurrentNode(prev => ({ ...prev, cpu: null, ram: null, disk: null }));
         
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
         }
         reconnectTimeoutRef.current = setTimeout(() => {
-            // Only reconnect if this is still the active socket instance
-            if (wsRef.current === ws) {
-                connect();
-            }
-        }, 60000); // 1 minute delay
+            connect();
+        }, 60000);
     };
 
     ws.onclose = handleCloseOrError;
@@ -398,13 +399,12 @@ const NodeDataRow = ({ node }: { node: Node }) => {
         </div>
       </TableCell>
       <TableCell>
-        {isOnline && currentNode.disk ? (
-          currentNode.disk.isUsage ? (
+        {isOnline && currentNode.disk && currentNode.disk.isUsage ? (
              <div className="flex items-center gap-3">
                 <span
                   className={cn(
                     'w-8 text-right font-medium',
-                    currentNode.disk.current > 90
+                    (currentNode.disk.current as number) > 90
                       ? 'text-rose-400'
                       : 'text-white'
                   )}
@@ -419,12 +419,6 @@ const NodeDataRow = ({ node }: { node: Node }) => {
                   )}
                 />
              </div>
-          ) : (
-            <span className="text-white font-medium">
-              {currentNode.disk.current}
-              {currentNode.disk.unit}
-            </span>
-          )
         ) : (
            <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
         )}
