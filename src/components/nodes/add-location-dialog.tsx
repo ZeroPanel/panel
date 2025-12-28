@@ -58,7 +58,7 @@ export function AddLocationDialog({
     setIsLoading(true);
     try {
       const response = await fetch(
-        `http://api.geonames.org/searchJSON?q=${encodeURIComponent(
+        `https://secure.geonames.org/searchJSON?q=${encodeURIComponent(
           term
         )}&maxRows=10&featureClass=P&orderby=population&username=studio`
       );
