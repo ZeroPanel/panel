@@ -158,6 +158,21 @@
             "ramUsage": {
                 "type": "number",
                 "description": "The current RAM usage in MB."
+            },
+            "userId": {
+                "type": "string",
+                "description": "The ID of the user this container is assigned to."
+            },
+            "ports": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "public": { "type": "number" },
+                        "private": { "type": "number" }
+                    },
+                    "required": ["public", "private"]
+                }
             }
         },
         "required": ["name", "image", "status", "node"]

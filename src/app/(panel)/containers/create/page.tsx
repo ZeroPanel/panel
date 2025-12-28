@@ -36,6 +36,8 @@ import {
   MemoryStick,
   Plus,
   Server,
+  Network,
+  User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useFirestore, useCollection } from '@/firebase';
@@ -46,6 +48,7 @@ import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/e
 import { useAppState } from '@/components/app-state-provider';
 
 type Node = { id: string, name: string };
+type User = { id: string, name: string };
 
 export default function CreateContainerPage() {
   const router = useRouter();
@@ -56,6 +59,9 @@ export default function CreateContainerPage() {
   const [containerName, setContainerName] = useState('');
   const [dockerImage, setDockerImage] = useState('');
   const [node, setNode] = useState('');
+  const [assignedUser, setAssignedUser] = useState('');
+  const [publicPort, setPublicPort] = useState('');
+  const [privatePort, setPrivatePort] = useState('');
   const [description, setDescription] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,6 +69,10 @@ export default function CreateContainerPage() {
   const nodesCollection = firestore ? collection(firestore, 'nodes') : null;
   const [nodesSnapshot] = useCollection(nodesCollection);
   const [nodes, setNodes] = useState<Node[]>([]);
+
+  const usersCollection = firestore ? collection(firestore, 'users') : null;
+  const [usersSnapshot] = useCollection(usersCollection);
+  const [users, setUsers] = useState<User[]>([]);
 
   useEffect(() => {
     if (nodesSnapshot) {
@@ -77,6 +87,19 @@ export default function CreateContainerPage() {
     }
   }, [nodesSnapshot, node]);
 
+  useEffect(() => {
+    if (usersSnapshot) {
+      const fetchedUsers = usersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name,
+      }));
+      setUsers(fetchedUsers);
+      if (fetchedUsers.length > 0 && !assignedUser) {
+        setAssignedUser(fetchedUsers[0].id);
+      }
+    }
+  }, [usersSnapshot, assignedUser]);
+
 
   const handleCreateContainer = async () => {
     if (!firestore) {
@@ -87,11 +110,11 @@ export default function CreateContainerPage() {
       });
       return;
     }
-    if (!containerName || !dockerImage || !node) {
+    if (!containerName || !dockerImage || !node || !assignedUser) {
       toast({
         variant: "destructive",
         title: "Missing Information",
-        description: "Please provide a Name, Docker Image, and select a Node.",
+        description: "Please provide a Name, Docker Image, select a Node and assign a User.",
       });
       return;
     }
@@ -108,6 +131,8 @@ export default function CreateContainerPage() {
         status: 'Starting',
         cpuUsage: 0,
         ramUsage: 0,
+        userId: assignedUser,
+        ports: publicPort && privatePort ? [{ public: Number(publicPort), private: Number(privatePort) }] : [],
         createdAt: serverTimestamp(),
     };
 
@@ -188,20 +213,37 @@ export default function CreateContainerPage() {
                 <Input id="docker-image" placeholder="e.g. nginx:latest" value={dockerImage} onChange={(e) => setDockerImage(e.target.value)} />
               </div>
             </div>
-             <div className="space-y-2">
-              <Label htmlFor="node">Deployment Node</Label>
-              <Select value={node} onValueChange={setNode}>
-                <SelectTrigger id="node" className="[&>span]:flex [&>span]:items-center [&>span]:gap-2">
-                  <SelectValue placeholder="Select a node to deploy to" />
-                </SelectTrigger>
-                <SelectContent>
-                  {nodes.map((n) => (
-                    <SelectItem key={n.id} value={n.id} className="flex items-center gap-2">
-                      <Server size={16} className="mr-2"/> {n.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label htmlFor="node">Deployment Node</Label>
+                    <Select value={node} onValueChange={setNode}>
+                        <SelectTrigger id="node" className="[&>span]:flex [&>span]:items-center [&>span]:gap-2">
+                        <SelectValue placeholder="Select a node to deploy to" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {nodes.map((n) => (
+                            <SelectItem key={n.id} value={n.id} className="flex items-center gap-2">
+                            <Server size={16} className="mr-2"/> {n.name}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="user">Assign to User</Label>
+                    <Select value={assignedUser} onValueChange={setAssignedUser}>
+                        <SelectTrigger id="user" className="[&>span]:flex [&>span]:items-center [&>span]:gap-2">
+                        <SelectValue placeholder="Select a user" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {users.map((u) => (
+                            <SelectItem key={u.id} value={u.id} className="flex items-center gap-2">
+                            <User size={16} className="mr-2"/> {u.name}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
@@ -214,6 +256,24 @@ export default function CreateContainerPage() {
               />
             </div>
           </CardContent>
+        </Card>
+        
+         <Card>
+            <CardHeader className="flex flex-row items-center gap-3">
+                <Network className="text-primary size-6" />
+                <CardTitle>Port Mapping</CardTitle>
+                 <CardDescription>Forward ports from the host to the container.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-2">
+                    <Label htmlFor="public-port">Public Port</Label>
+                    <Input id="public-port" placeholder="e.g. 8080" value={publicPort} onChange={e => setPublicPort(e.target.value)} />
+                  </div>
+                   <div className="space-y-2">
+                    <Label htmlFor="private-port">Private Port</Label>
+                    <Input id="private-port" placeholder="e.g. 80" value={privatePort} onChange={e => setPrivatePort(e.target.value)} />
+                  </div>
+            </CardContent>
         </Card>
         
         <Card>
