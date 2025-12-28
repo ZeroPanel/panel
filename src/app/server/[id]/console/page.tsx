@@ -19,7 +19,7 @@ import {
   Send,
   Terminal,
 } from 'lucide-react';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import Link from 'next/link';
@@ -67,9 +67,13 @@ const statusStyles: Record<ContainerStatus, {
 
 const ConsolePage = ({ params }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
-  const firestore = isFirebaseEnabled ? useFirestore() : null;
+  const firestore = useFirestore();
   
-  const containerRef = firestore ? doc(firestore, 'containers', params.id) : null;
+  const containerId = params.id;
+  const containerRef = useMemo(() => 
+    firestore && containerId ? doc(firestore, 'containers', containerId) : null, 
+    [firestore, containerId]
+  );
   const [containerSnapshot, containerLoading, containerError] = useDoc(containerRef);
   
   const [container, setContainer] = useState<Container | null>(null);
@@ -365,4 +369,3 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
-
