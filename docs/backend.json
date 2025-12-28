@@ -88,6 +88,42 @@
         }
       },
       "required": ["city", "country", "flag"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the admin panel.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["Admin", "User", "Viewer"],
+          "description": "The role of the user."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Active", "Suspended", "Invited"],
+          "description": "The status of the user account."
+        },
+        "lastLogin": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The last time the user logged in."
+        },
+        "avatar": {
+            "type": "string",
+            "description": "URL to the user's avatar image."
+        }
+      },
+      "required": ["name", "email", "role", "status"]
     }
   },
   "auth": {
@@ -105,6 +141,12 @@
         "$ref": "#/entities/Location"
       },
       "description": "Stores available geographical locations for nodes."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles for the application."
     }
   }
 }
