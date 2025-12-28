@@ -96,7 +96,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const logsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (containerSnapshot?.exists()) {
@@ -130,18 +129,13 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
         console.log(`WS connected to ${wsUrl}`);
         setLogs([{ time: new Date().toLocaleTimeString('en-GB'), level: 'SUCCESS', message: `Connected to container ${container.name}` }]);
         
-        // Start polling for health and logs
+        // Start polling for health
         healthIntervalRef.current = setInterval(() => {
           wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
         }, 5000); // Health every 5s
 
-        logsIntervalRef.current = setInterval(() => {
-            wsRef.current?.send(JSON.stringify({ type: 'logs' }));
-        }, 5000); // Logs every 5s
-
         // Initial fetch
         wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
-        wsRef.current?.send(JSON.stringify({ type: 'logs' }));
       };
 
       wsRef.current.onmessage = (event) => {
@@ -165,13 +159,19 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
                 message: log,
             }));
             setLogs(prev => [...prev, ...newLogs]);
+        } else if (data.log) { // Handle unsolicited log messages
+            const newLog: LogEntry = {
+                time: new Date().toLocaleTimeString('en-GB'),
+                level: 'INFO',
+                message: data.log,
+            };
+            setLogs(prev => [...prev, newLog]);
         }
       };
 
       wsRef.current.onclose = () => {
         console.log('WS disconnected');
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        if (logsIntervalRef.current) clearInterval(logsIntervalRef.current);
         setLogs(prev => [...prev, { time: new Date().toLocaleTimeString('en-GB'), level: 'ERROR', message: 'Disconnected from container.' }]);
         setTimeout(connect, 5000);
       };
@@ -186,7 +186,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
     return () => {
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        if (logsIntervalRef.current) clearInterval(logsIntervalRef.current);
         wsRef.current?.close();
     }
   }, [nodeIp, container?.containerId, container?.name]);
@@ -194,7 +193,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
   const handleSendCommand = () => {
     if (command.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'command', command: command + '\n' }));
+      wsRef.current.send(JSON.stringify({ command: command + '\n' }));
       setLogs([...logs, {
         time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
         level: 'INPUT',
@@ -361,5 +360,3 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
-
-    
