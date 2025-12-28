@@ -55,42 +55,42 @@ export function ContainerCard({ container }: { container: Container }) {
 
     useEffect(() => {
         if (currentStatus === 'Starting' && nodeIp && container.containerId) {
-            const connectHealth = () => {
-                healthWsRef.current = new WebSocket(`wss://${nodeIp}/health`);
+            const connectStatus = () => {
+                const wsUrl = `wss://${nodeIp}/containers/${container.containerId}/status`;
+                healthWsRef.current = new WebSocket(wsUrl);
 
                 healthWsRef.current.onopen = () => {
-                    console.log(`Health WS connected for ${container.name}`);
-                    healthWsRef.current?.send(JSON.stringify({ type: 'container_health', containerId: container.containerId }));
+                    console.log(`Status WS connected for ${container.name} at ${wsUrl}`);
                 };
 
                 healthWsRef.current.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
-                        if (data.type === 'container_health_response' && data.status) {
-                            const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+                        if (data.type === 'container_status' && data.status) {
+                             const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
                              if (newStatus !== 'Starting') {
                                 setCurrentStatus(newStatus);
                                 healthWsRef.current?.close();
                             }
                         }
                     } catch (e) {
-                         console.error("Failed to parse health message:", e);
+                         console.error("Failed to parse status message:", e);
                     }
                 };
 
                 healthWsRef.current.onclose = () => {
-                    console.log(`Health WS disconnected for ${container.name}`);
+                    console.log(`Status WS disconnected for ${container.name}`);
                     if (currentStatus === 'Starting') { // Only retry if still starting
-                        setTimeout(connectHealth, 5000);
+                        setTimeout(connectStatus, 5000);
                     }
                 };
 
                 healthWsRef.current.onerror = (err) => {
-                    console.error('Health WS error:', err);
+                    console.error('Status WS error:', err);
                     healthWsRef.current?.close();
                 };
             };
-            connectHealth();
+            connectStatus();
         }
         
         return () => {
