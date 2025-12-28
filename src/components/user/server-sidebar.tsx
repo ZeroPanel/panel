@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -42,7 +43,7 @@ export function ServerSidebar({ serverId }: { serverId: string }) {
                 {/* Branding & Back button */}
                 <div className="flex flex-col gap-4 mb-6">
                     <div className="flex gap-3 px-2 py-4">
-                        <Image src="https://lh3.googleusercontent.com/aida-public/AB6AXuBogkWIMDrh5eaL38Rww_egDjkcXbBymh-eJclZx1JyY8vDV2nl_BKojR_tqGi0FnzPOK9ZLRncAdCRnKtEhBJoqoe51YNOEyVv9tvvdNKHf7KdbFP_bpVrP5hAu2JprdZQYDUmrOcJa_ZBJ1qVIHdahfPRzWOSJ8B5gYC-MZUNxRtWPc5P6wS5WROaksnw6i6FQhHHiNa1O-FU3XdRNu5mSuUQqvvMKPV3eBzSYt4ofvVVRcxN-1jePdghqzWFyACOWsWSxzveFI0" alt="Minecraft SMP icon" width={40} height={40} className="rounded-lg" />
+                        <Image src="https://picsum.photos/seed/server-icon/40/40" alt="Minecraft SMP icon" width={40} height={40} className="rounded-lg" />
                         <div className="flex flex-col justify-center">
                             <h1 className="text-white text-base font-bold leading-none">{serverName}</h1>
                             <p className="text-text-secondary text-xs font-normal mt-1">

@@ -1,74 +1,76 @@
+
 'use client'
 
+import { useMemo } from 'react';
 import { UserStatCard } from "@/components/user/stat-card";
 import { UserServerCard } from "@/components/user/server-card";
 import { Button } from "@/components/ui/button";
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, DocumentData } from 'firebase/firestore';
+import { useAppState } from '@/components/app-state-provider';
 
-const servers = [
-    {
-      name: "Minecraft SMP",
-      ip: "192.168.1.12:25565",
-      status: "Running",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBogkWIMDrh5eaL38Rww_egDjkcXbBymh-eJclZx1JyY8vDV2nl_BKojR_tqGi0FnzPOK9ZLRncAdCRnKtEhBJoqoe51YNOEyVv9tvvdNKHf7KdbFP_bpVrP5hAu2JprdZQYDUmrOcJa_ZBJ1qVIHdahfPRzWOSJ8B5gYC-MZUNxRtWPc5P6wS5WROaksnw6i6FQhHHiNa1O-FU3XdRNu5mSuUQqvvMKPV3eBzSYt4ofvVVRcxN-1jePdghqzWFyACOWsWSxzveFI0",
-      cpuLoad: 12,
-      ramUsage: 52,
-      diskUsage: 24,
-      ramMax: 8,
-      ramCurrent: 4.2,
-      diskMax: 50,
-      diskCurrent: 12,
-    },
-    {
-      name: "Rust Wipe Server",
-      ip: "192.168.1.15:28015",
-      status: "Stopped",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBGD3NFjk34bLUMzdtSo-u2w7yVoNWrJ0HVyCdotKfZUnaAZ_8EDRBlR2_XHvJu0PyDG-3PlyXzL8PA-JCbBJkEdMXPqDjetbNvW0_uIZ_6IY3TZVDYtFSmUFo9U1MVRFZWg_J4iBQqntp82IcUjnEHPGeYzYLqDzsPlijQG5KjdMKlnpDCyhkQyK5XiPjZVnW27M7xc9AivM322bHgceK-Rlq1a71rgMm0ZYlR4cWdjckaUuDxzTUZx7itC1DaKeV72Lv8gQwrYFM",
-      cpuLoad: 0,
-      ramUsage: 0,
-      diskUsage: 45,
-      ramMax: 16,
-      ramCurrent: 0,
-      diskMax: 100,
-      diskCurrent: 45,
-    },
-    {
-      name: "NodeJS API",
-      ip: "10.0.0.5:3000",
-      status: "Building",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDJAqy7MHfRgnVhOmykFEWyCWh0uFwA53-dZMGvlTsRB_BlcLj4lkeb1tp8Js_7ngZfNyX61CqimEpU9tHpZDk0ABReG_qyKVqOrXMgzNHmWsvobDRtZmd-0vaz7PtOITipzUD8HOLaZ6DXGzACD0ZiWXvyqfF6wToqzG4IsYZ62ZBeJYHF22EMuD_mP7bnxcG2b38Wyn1aqicqRJ7O7gFmj-0jey-9EiGhFyu3qQeLx2L7sMcyidEJVzkDN-tlWylQkGZleiurppw",
-      cpuLoad: 89,
-      ramUsage: 60,
-      diskUsage: 5,
-      ramMax: 2,
-      ramCurrent: 1.2,
-      diskMax: 10,
-      diskCurrent: 0.5,
-    },
-     {
-      name: "CS2 Match",
-      ip: "192.168.1.99:27015",
-      status: "Running",
-      image: "https://lh3.googleusercontent.com/aida-public/AB6AXuDRJB6T75JCH3lfttcjhj-nAH4BuV4IgRBS-oxd80oYhWOTZ-RT7sDlvJSDtCeVKFWkpziKytI0QtKWRInQ79HPgUGQY9hadITnlRGOlvnvgb-5j4WLEf1fbyRuW1q2AM1MTeE7dcx4hm0WCVyMnpVMXlwTVH2l0ZENeJZO3OCowcxtCKohenIwQjWIZS3RrKU7ji93SNCtSH9i7dfFeZ7jBIdhy6VH2p7RfhFumTxojEjASCKyqOafEG3s7f09qShQ0leI7QBAlTQ",
-      cpuLoad: 45,
-      ramUsage: 55,
-      diskUsage: 58,
-      ramMax: 4,
-      ramCurrent: 2.1,
-      diskMax: 60,
-      diskCurrent: 35,
-    },
-];
+type ServerStatus = "Running" | "Stopped" | "Building";
 
-const filters = ["All Servers", "Running", "Stopped", "Installing", "Maintenance"];
+interface Server {
+    id: string;
+    name: string;
+    ip: string;
+    status: ServerStatus;
+    image: string;
+    cpuLoad: number;
+    ramUsage: number;
+    diskUsage: number;
+    ramMax: number;
+    ramCurrent: number;
+    diskMax: number;
+    diskCurrent: number;
+}
+
+const filters = ["All Servers", "Running", "Stopped", "Starting"];
+
+function transformFirestoreData(doc: DocumentData): Server {
+  const data = doc.data();
+  const ports = data.ports?.[0];
+  const ip = ports ? `${data.nodeName}:${ports.public}` : `${data.nodeName}`;
+
+  const ramUsagePercentage = data.ramMax > 0 ? (data.ramUsage / (data.ramMax * 1024)) * 100 : 0;
+
+  return {
+    id: doc.id,
+    name: data.name || 'Unnamed Server',
+    ip: ip,
+    status: data.status === 'Starting' ? 'Building' : data.status,
+    image: data.image || 'https://picsum.photos/seed/placeholder/400/400',
+    cpuLoad: data.cpuUsage || 0,
+    ramUsage: ramUsagePercentage,
+    diskUsage: 0, // Placeholder
+    ramMax: data.ramMax || 0, // Assuming it's in GB
+    ramCurrent: data.ramUsage / 1024 || 0, // Convert MB to GB
+    diskMax: 0, // Placeholder
+    diskCurrent: 0, // Placeholder
+  };
+}
+
 
 export default function MyServersPage() {
+    const { isFirebaseEnabled } = useAppState();
+    const firestore = isFirebaseEnabled ? useFirestore() : null;
+    const containersCollection = firestore ? collection(firestore, 'containers') : null;
+    const [snapshot, loading, error] = useCollection(containersCollection);
+
+    const servers = useMemo(() => {
+        if (!isFirebaseEnabled || !snapshot) return [];
+        return snapshot.docs.map(transformFirestoreData);
+    }, [isFirebaseEnabled, snapshot]);
+
+
     return (
         <div className="mx-auto max-w-7xl flex flex-col gap-8">
             {/* Stats Row */}
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <UserStatCard title="Total Servers" value="12" metric="+2 this month" icon="server" metricColor="text-emerald-500" />
-                <UserStatCard title="Active Instances" value="8" metric="Running" icon="check_circle" iconColor="text-emerald-500" />
-                <UserStatCard title="Total CPU Load" value="45%" metric="Avg across fleet" icon="memory" iconColor="text-orange-400" />
+                <UserStatCard title="Total Servers" value={servers.length.toString()} metric="+2 this month" icon="server" metricColor="text-emerald-500" />
+                <UserStatCard title="Active Instances" value={servers.filter(s => s.status === 'Running').length.toString()} metric="Running" icon="check_circle" iconColor="text-emerald-500" />
+                <UserStatCard title="Total CPU Load" value={`${Math.round(servers.reduce((acc, s) => acc + s.cpuLoad, 0) / servers.length || 0)}%`} metric="Avg across fleet" icon="memory" iconColor="text-orange-400" />
                 <UserStatCard title="Monthly Cost" value="$120.50" metric="USD" icon="payments" />
             </section>
 
@@ -91,11 +93,16 @@ export default function MyServersPage() {
             </section>
             
             {/* Server Grid */}
-            <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {servers.map((server) => (
-                    <UserServerCard key={server.name} server={server} />
-                ))}
-            </section>
+            {loading && <p className="text-center text-text-secondary py-16">Loading your servers...</p>}
+            {error && <p className="text-center text-rose-400 py-16">Error loading servers: {error.message}</p>}
+
+            {!loading && !error && (
+                <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {servers.map((server) => (
+                        <UserServerCard key={server.id} server={server} />
+                    ))}
+                </section>
+            )}
         </div>
     )
 }

@@ -9,6 +9,7 @@ import Link from 'next/link';
 type ServerStatus = "Running" | "Stopped" | "Building";
 
 interface Server {
+    id: string;
     name: string;
     ip: string;
     status: ServerStatus;
@@ -50,6 +51,8 @@ const statusStyles: Record<ServerStatus, {
 
 export function UserServerCard({ server }: { server: Server }) {
     const statusConfig = statusStyles[server.status];
+    const ramUsagePercentage = server.ramMax > 0 ? (server.ramCurrent / server.ramMax) * 100 : 0;
+    const diskUsagePercentage = server.diskMax > 0 ? (server.diskCurrent / server.diskMax) * 100 : 0;
 
     return (
         <div className="group flex flex-col bg-card-dark border border-border-dark rounded-xl overflow-hidden hover:border-primary/50 transition-all duration-300 shadow-lg">
@@ -58,7 +61,7 @@ export function UserServerCard({ server }: { server: Server }) {
                 <div className="flex justify-between items-start">
                     <div className="flex gap-4">
                         <div className={`relative size-12 rounded-lg bg-cover bg-center shrink-0 shadow-inner ${server.status === 'Stopped' ? 'grayscale opacity-70' : ''}`}>
-                             <Image src={server.image} alt={`${server.name} icon`} fill={true} sizes="100vw" className="rounded-lg" />
+                             <Image src={server.image} alt={`${server.name} icon`} fill sizes="100vw" className="rounded-lg" />
                             <div className={`absolute -bottom-1 -right-1 size-3.5 ${statusConfig.dot} rounded-full border-2 border-card-dark`}></div>
                         </div>
                         <div className="flex flex-col">
@@ -88,10 +91,10 @@ export function UserServerCard({ server }: { server: Server }) {
                     <div className="space-y-1">
                         <div className="flex justify-between text-xs text-text-secondary font-medium">
                             <span>RAM</span>
-                            <span className="text-white">{server.ramCurrent} / {server.ramMax} GB</span>
+                            <span className="text-white">{server.ramCurrent.toFixed(1)} / {server.ramMax} GB</span>
                         </div>
                         <div className="h-1.5 w-full bg-background-dark rounded-full overflow-hidden">
-                            <div className={`h-full bg-primary w-[${server.ramUsage}%] rounded-full`}></div>
+                            <div className={`h-full bg-primary w-[${ramUsagePercentage}%] rounded-full`}></div>
                         </div>
                     </div>
                     {/* Disk */}
@@ -101,7 +104,7 @@ export function UserServerCard({ server }: { server: Server }) {
                             <span className="text-white">{server.diskCurrent} / {server.diskMax} GB</span>
                         </div>
                         <div className="h-1.5 w-full bg-background-dark rounded-full overflow-hidden">
-                            <div className={`h-full bg-purple-500 w-[${server.diskUsage}%] rounded-full`}></div>
+                            <div className={`h-full bg-purple-500 w-[${diskUsagePercentage}%] rounded-full`}></div>
                         </div>
                     </div>
                 </div>
@@ -120,7 +123,7 @@ export function UserServerCard({ server }: { server: Server }) {
                     </Button>
                 </div>
                 <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={server.status === 'Stopped'}>
-                    <Link href={`/server/${server.name.toLowerCase().replace(' ', '-')}/console`}>
+                    <Link href={`/server/${server.id}/console`}>
                       <Terminal size={16} />
                       Console
                     </Link>
