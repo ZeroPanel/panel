@@ -54,53 +54,54 @@ export function ContainerCard({ container }: { container: Container }) {
     }, [nodeSnapshot]);
 
     useEffect(() => {
-        if (currentStatus === 'Starting' && nodeIp && container.containerId) {
-            const connectStatus = () => {
-                const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
-                healthWsRef.current = new WebSocket(wsUrl);
+        // Only connect if we have the required info and there isn't already a connection
+        if (!nodeIp || !container.containerId || healthWsRef.current) return;
 
-                healthWsRef.current.onopen = () => {
-                    console.log(`Status WS connected for ${container.name} at ${wsUrl}`);
-                    healthWsRef.current?.send(JSON.stringify({ type: 'container_info' }));
-                };
+        const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+        const ws = new WebSocket(wsUrl);
+        healthWsRef.current = ws;
 
-                healthWsRef.current.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'container_status' && data.status) {
-                             const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
-                             if (newStatus !== 'Starting') {
-                                setCurrentStatus(newStatus);
-                                healthWsRef.current?.close();
-                            }
-                        }
-                    } catch (e) {
-                         console.error("Failed to parse status message:", e);
-                    }
-                };
+        ws.onopen = () => {
+            console.log(`Status WS connected for ${container.name} at ${wsUrl}`);
+            ws.send(JSON.stringify({ type: 'container_info' }));
+        };
 
-                healthWsRef.current.onclose = () => {
-                    console.log(`Status WS disconnected for ${container.name}`);
-                    if (currentStatus === 'Starting') { // Only retry if still starting
-                        setTimeout(connectStatus, 5000);
-                    }
-                };
-
-                healthWsRef.current.onerror = (err) => {
-                    console.error('Status WS error:', err);
-                    healthWsRef.current?.close();
-                };
-            };
-            connectStatus();
-        }
-        
-        return () => {
-            if (healthWsRef.current) {
-                healthWsRef.current.close();
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'container_status' && data.status) {
+                     const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+                     setCurrentStatus(newStatus);
+                     // If we get a stable status, we can close the connection
+                     if (newStatus !== 'Starting') {
+                        ws.close();
+                        healthWsRef.current = null;
+                     }
+                }
+            } catch (e) {
+                 console.error("Failed to parse status message:", e);
             }
         };
 
-    }, [currentStatus, nodeIp, container.containerId, container.name]);
+        ws.onclose = () => {
+            console.log(`Status WS disconnected for ${container.name}`);
+            healthWsRef.current = null; // Clear the ref on close
+        };
+
+        ws.onerror = (err) => {
+            console.error('Status WS error:', err);
+            // The onclose event will be fired after an error, so cleanup happens there.
+        };
+        
+        // Cleanup function to close the WebSocket when the component unmounts
+        return () => {
+            if (healthWsRef.current) {
+                healthWsRef.current.close();
+                healthWsRef.current = null;
+            }
+        };
+
+    }, [nodeIp, container.containerId, container.name]);
 
     const statusConfig = statusStyles[currentStatus];
 
