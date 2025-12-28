@@ -7,7 +7,7 @@ const isServer = typeof window === 'undefined';
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   // Function to read value from localStorage
-  const readValue = useCallback((): T => {
+  const readValue = (): T => {
     if (isServer) {
       return initialValue;
     }
@@ -19,11 +19,11 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
       console.warn(`Error reading localStorage key “${key}”:`, error);
       return initialValue;
     }
-  }, [initialValue, key]);
+  };
 
   // State to store our value
   // Pass initial state function to useState so logic is only executed once
-  const [storedValue, setStoredValue] = useState<T>(readValue);
+  const [storedValue, setStoredValue] = useState<T>(initialValue);
 
   // Return a wrapped version of useState's setter function that ...
   // ... persists the new value to localStorage.
@@ -52,8 +52,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
   useEffect(() => {
     setStoredValue(readValue());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, readValue]);
+  }, [key, initialValue]);
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent | CustomEvent) => {
@@ -76,3 +75,5 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T 
 
   return [storedValue, setValue];
 }
+
+    

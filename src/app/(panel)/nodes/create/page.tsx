@@ -50,7 +50,6 @@ import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { useAppState } from '@/components/app-state-provider';
-import { useLocalStorage } from '@/hooks/use-local-storage';
 
 type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 
@@ -84,13 +83,11 @@ export default function CreateNodePage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const initialLocationMap = {
+  const locations = {
     'us-nyc-01': { city: 'New York', flag: '🇺🇸' },
     'de-fra-01': { city: 'Frankfurt', flag: '🇩🇪' },
     'jp-tok-01': { city: 'Tokyo', flag: '🇯🇵' },
   };
-
-  const [locations, setLocations] = useLocalStorage('locations', initialLocationMap);
 
   const handleCreateNode = async () => {
     if (!firestore) {
@@ -115,7 +112,7 @@ export default function CreateNodePage() {
     const newNode = {
         name: nodeName,
         ip: fqdn,
-        location: locations[location],
+        location: locations[location as keyof typeof locations],
         status: 'Offline', // Will be updated by health check on the nodes page
         description,
         isPublic,
@@ -456,3 +453,5 @@ export default function CreateNodePage() {
     </>
   );
 }
+
+    

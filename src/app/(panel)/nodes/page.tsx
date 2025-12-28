@@ -36,6 +36,8 @@ import {
   Wrench,
   Power,
   PowerOff,
+  HardDrive,
+  MemoryStick,
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
@@ -52,7 +54,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AddLocationDialog } from '@/components/nodes/add-location-dialog';
 
 type NodeStatus = 'Online' | 'Offline' | 'Maint.' | 'Connecting';
 
@@ -187,8 +188,8 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      wsRef.current.close();
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+        return; 
     }
   
     if (!node.ip) {
@@ -337,7 +338,8 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
   const ramMax = (isOnline && currentNode.ram) ? currentNode.ram.max : 0;
   const ramUsage = ramMax > 0 ? (ramCurrent / ramMax) * 100 : 0;
   
-  const cpuUsage = (isOnline && currentNode.cpu !== null) ? currentNode.cpu : null;
+  const diskUsage = (isOnline && currentNode.disk && currentNode.disk.isUsage) ? (currentNode.disk.current as number) : null;
+
 
   return (
     <TableRow>
@@ -347,7 +349,7 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
           {currentNode.ip}
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className='hidden md:table-cell'>
         <div className="flex items-center gap-2">
           <span className="text-xl">{currentNode.location.flag}</span>
           <span className="text-text-secondary">
@@ -371,42 +373,18 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-3">
-          {cpuUsage !== null ? (
-            <>
-              <span
-                className={cn(
-                  'w-8 text-right font-medium',
-                  cpuUsage > 80
-                    ? 'text-amber-400'
-                    : 'text-white'
-                )}
-              >
-                {cpuUsage}%
-              </span>
-              <Progress
-                value={cpuUsage}
-                className={cn(
-                  'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
-                  cpuUsage > 80 && '[&>div]:bg-amber-500'
-                )}
-              />
-            </>
-          ) : (
-            <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-3">
           {isOnline && currentNode.ram ? (
             <>
-              <span className="text-white font-medium w-24">
+              <div className="hidden sm:flex items-center gap-3 w-[120px]">
+                <MemoryStick size={16} className='text-purple-400' />
+                <Progress
+                  value={ramUsage}
+                  className="h-1.5 w-full bg-background-dark [&>div]:bg-purple-500"
+                />
+              </div>
+              <span className="text-white font-medium text-xs w-[80px]">
                 {ramCurrent.toFixed(1)}GB / {ramMax.toFixed(1)}GB
               </span>
-              <Progress
-                value={ramUsage}
-                className="h-1.5 w-24 bg-background-dark [&>div]:bg-purple-500"
-              />
             </>
           ) : (
              <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
@@ -414,25 +392,28 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
         </div>
       </TableCell>
       <TableCell>
-        {isOnline && currentNode.disk && currentNode.disk.isUsage ? (
+        {diskUsage !== null ? (
              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-3 w-[120px]">
+                    <HardDrive size={16} className='text-blue-400' />
+                    <Progress
+                        value={diskUsage}
+                        className={cn(
+                            'h-1.5 w-full bg-background-dark [&>div]:bg-blue-500',
+                            diskUsage > 90 && '[&>div]:bg-rose-500'
+                        )}
+                    />
+                </div>
                 <span
                   className={cn(
-                    'w-8 text-right font-medium',
-                    (currentNode.disk.current as number) > 90
+                    'w-8 text-right font-medium text-xs',
+                    diskUsage > 90
                       ? 'text-rose-400'
                       : 'text-white'
                   )}
                 >
-                  {currentNode.disk.current}%
+                  {diskUsage}%
                 </span>
-                <Progress
-                  value={currentNode.disk.current as number}
-                  className={cn(
-                    'h-1.5 w-24 bg-background-dark [&>div]:bg-primary',
-                    (currentNode.disk.current as number) > 90 && '[&>div]:bg-rose-500'
-                  )}
-                />
              </div>
         ) : (
            <span className="text-text-secondary">{isOnline ? '-' : '0'}</span>
@@ -463,7 +444,6 @@ export default function NodesPage() {
   const [sortOption, setSortOption] = useState('name-asc');
   
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({});
-  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
 
   const handleStatusChange = useCallback((nodeId: string, status: NodeStatus) => {
     setNodeStatuses(prev => ({...prev, [nodeId]: status}));
@@ -549,9 +529,6 @@ export default function NodesPage() {
             </p>
           </div>
           <div className='flex items-center gap-2'>
-            <Button variant="outline" onClick={() => setIsAddLocationOpen(true)}>
-                <MapPin size={20} className="mr-2" /> Add New Location
-            </Button>
             <Button asChild>
               <Link href="/nodes/create">
                 <Plus size={20} className="mr-2" /> Create New Node
@@ -651,9 +628,8 @@ export default function NodesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Node Name</TableHead>
-              <TableHead>Location</TableHead>
+              <TableHead className="hidden md:table-cell">Location</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>CPU</TableHead>
               <TableHead>RAM</TableHead>
               <TableHead>Disk</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -724,7 +700,8 @@ export default function NodesPage() {
         </div>
       )}
     </div>
-    <AddLocationDialog isOpen={isAddLocationOpen} onOpenChange={setIsAddLocationOpen} />
     </>
   );
 }
+
+    
