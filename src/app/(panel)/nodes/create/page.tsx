@@ -50,6 +50,7 @@ import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { useAppState } from '@/components/app-state-provider';
+import { useLocalStorage } from '@/hooks/use-local-storage';
 
 type ConnectionStatus = 'Disconnected' | 'Connecting' | 'Connected' | 'Error';
 
@@ -83,11 +84,13 @@ export default function CreateNodePage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const locationMap: { [key: string]: { city: string, flag: string } } = {
+  const initialLocationMap = {
     'us-nyc-01': { city: 'New York', flag: '🇺🇸' },
     'de-fra-01': { city: 'Frankfurt', flag: '🇩🇪' },
     'jp-tok-01': { city: 'Tokyo', flag: '🇯🇵' },
   };
+
+  const [locations, setLocations] = useLocalStorage('locations', initialLocationMap);
 
   const handleCreateNode = async () => {
     if (!firestore) {
@@ -112,7 +115,7 @@ export default function CreateNodePage() {
     const newNode = {
         name: nodeName,
         ip: fqdn,
-        location: locationMap[location],
+        location: locations[location],
         status: 'Offline', // Will be updated by health check on the nodes page
         description,
         isPublic,
@@ -302,18 +305,12 @@ export default function CreateNodePage() {
                     <Label htmlFor="location">Location</Label>
                     <Select value={location} onValueChange={setLocation}>
                       <SelectTrigger id="location">
-                        <SelectValue placeholder="New York, USA (US-NYC-01)" />
+                        <SelectValue placeholder="Select a location" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="us-nyc-01">
-                          New York, USA (US-NYC-01)
-                        </SelectItem>
-                        <SelectItem value="de-fra-01">
-                          Frankfurt, DE (DE-FRA-01)
-                        </SelectItem>
-                        <SelectItem value="jp-tok-01">
-                          Tokyo, JP (JP-TOK-01)
-                        </SelectItem>
+                        {Object.entries(locations).map(([key, loc]) => (
+                            <SelectItem key={key} value={key}>{loc.city}, {key.split('-')[0].toUpperCase()}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -459,5 +456,3 @@ export default function CreateNodePage() {
     </>
   );
 }
-
-    

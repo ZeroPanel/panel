@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -43,6 +43,16 @@ import { Progress } from '@/components/ui/progress';
 import { useFirestore, useCollection } from '@/firebase';
 import { collection, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { AddLocationDialog } from '@/components/nodes/add-location-dialog';
 
 type NodeStatus = 'Online' | 'Offline' | 'Maint.' | 'Connecting';
 
@@ -151,13 +161,6 @@ const statusStyles: Record<
   },
 };
 
-const filterPills = [
-  { label: 'All', active: true },
-  { label: 'Online', count: 12, status: 'Online' as NodeStatus },
-  { label: 'Offline', count: 2, status: 'Offline' as NodeStatus },
-  { label: 'Maintenance', count: 1, status: 'Maint.' as NodeStatus },
-];
-
 function transformFirestoreData(doc: DocumentData): Node {
     const data = doc.data();
     return {
@@ -175,7 +178,7 @@ function transformFirestoreData(doc: DocumentData): Node {
     };
 }
 
-const NodeDataRow = ({ node }: { node: Node }) => {
+const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatusChange: (nodeId: string, status: NodeStatus) => void }) => {
   const [currentNode, setCurrentNode] = useState<Node>(node);
   const [status, setStatus] = useState<NodeStatus>('Connecting');
   const wsRef = useRef<WebSocket | null>(null);
@@ -184,121 +187,133 @@ const NodeDataRow = ({ node }: { node: Node }) => {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    if (!node.ip) {
-      setStatus('Offline');
-      return;
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      wsRef.current.close();
     }
   
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      return; 
+    if (!node.ip) {
+      setStatus('Offline');
+      onStatusChange(node.id, 'Offline');
+      return;
     }
-    
+
     if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
     }
 
     setStatus('Connecting');
+    onStatusChange(node.id, 'Connecting');
 
-    const ws = new WebSocket(`wss://${node.ip}/health`);
-    wsRef.current = ws;
+    try {
+        const ws = new WebSocket(`wss://${node.ip}/health`);
+        wsRef.current = ws;
 
-    const clearTimers = () => {
-        if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        pingIntervalRef.current = null;
-        timeoutRef.current = null;
-    };
-    
-    const setupPing = () => {
-        clearTimers();
-        pingIntervalRef.current = setInterval(() => {
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({ type: 'health' }));
+        const clearTimers = () => {
+            if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            pingIntervalRef.current = null;
+            timeoutRef.current = null;
+        };
+        
+        const setupPing = () => {
+            clearTimers();
+            pingIntervalRef.current = setInterval(() => {
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'health' }));
 
-                timeoutRef.current = setTimeout(() => {
-                    if(wsRef.current === ws) {
-                      ws.close();
+                    timeoutRef.current = setTimeout(() => {
+                        if(wsRef.current === ws) {
+                          ws.close();
+                        }
+                    }, 30000); 
+                }
+            }, 30000);
+        };
+
+        ws.onopen = () => {
+            if(wsRef.current !== ws) return;
+            console.log(`WebSocket connected to ${node.ip}`);
+            ws.send(JSON.stringify({ type: 'health' }));
+            timeoutRef.current = setTimeout(() => {
+              if(wsRef.current === ws) ws.close();
+            }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            if(wsRef.current !== ws) return; 
+
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'health_response') {
+                    let newStatus: NodeStatus;
+                    if(data.maintenance?.enabled) {
+                        newStatus = 'Maint.';
+                    } else if (data.status === 'healthy') {
+                        newStatus = 'Online';
+                    } else {
+                        newStatus = 'Offline';
                     }
-                }, 30000); 
-            }
-        }, 30000);
-    };
 
-    ws.onopen = () => {
-        console.log(`WebSocket connected to ${node.ip}`);
-        if(wsRef.current !== ws) return;
+                    setStatus(newStatus);
+                    onStatusChange(node.id, newStatus);
 
-        ws.send(JSON.stringify({ type: 'health' }));
-        timeoutRef.current = setTimeout(() => {
-          if(wsRef.current === ws) ws.close();
-        }, 30000);
-    };
 
-    ws.onmessage = (event) => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if(wsRef.current !== ws) return; 
+                    if (newStatus === 'Online') {
+                        setupPing();
+                    } else {
+                        clearTimers();
+                    }
 
-        try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'health_response') {
-                let newStatus: NodeStatus;
-                if(data.maintenance?.enabled) {
-                    newStatus = 'Maint.';
-                } else if (data.status === 'healthy') {
-                    newStatus = 'Online';
-                } else {
-                    newStatus = 'Offline';
+                    setCurrentNode(prev => ({
+                        ...prev,
+                        cpu: data.memory?.usage,
+                        ram: data.memory ? {
+                            current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
+                            max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
+                        } : prev.ram,
+                        disk: data.storage ? {
+                            current: data.storage.percent,
+                            isUsage: true,
+                            unit: 'GB',
+                        } : prev.disk,
+                    }));
                 }
-
-                setStatus(newStatus);
-
-                if (newStatus === 'Online') {
-                    setupPing();
-                } else {
-                    clearTimers();
-                }
-
-                setCurrentNode(prev => ({
-                    ...prev,
-                    cpu: data.memory?.usage, // Using memory usage for CPU as per new payload
-                    ram: data.memory ? {
-                        current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
-                        max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
-                    } : prev.ram,
-                    disk: data.storage ? {
-                        current: data.storage.percent,
-                        isUsage: true,
-                        unit: 'GB',
-                    } : prev.disk,
-                }));
+            } catch (e) {
+                console.error("Failed to parse health check response", e);
             }
-        } catch (e) {
-            console.error("Failed to parse health check response", e);
-        }
-    };
-    
-    const handleCloseOrError = (event: Event) => {
-        console.log(`WebSocket disconnected from ${node.ip}.`, event);
-        if (wsRef.current !== ws) return; 
+        };
+        
+        const handleCloseOrError = (event: Event | CloseEvent) => {
+            if (wsRef.current !== ws) return;
+            console.log(`WebSocket disconnected from ${node.ip}.`, event);
 
-        clearTimers();
+            clearTimers();
+            setStatus('Offline');
+            onStatusChange(node.id, 'Offline');
+            
+            setCurrentNode(prev => ({ ...prev, cpu: null, ram: null, disk: null }));
+            
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+            reconnectTimeoutRef.current = setTimeout(() => {
+                connect();
+            }, 60000); // 1 minute delay
+        };
+
+        ws.onclose = handleCloseOrError;
+        ws.onerror = handleCloseOrError as any;
+
+    } catch (e) {
+        console.error("Failed to create WebSocket:", e);
         setStatus('Offline');
-        
-        setCurrentNode(prev => ({ ...prev, cpu: null, ram: null, disk: null }));
-        
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-        }
-        reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-        }, 60000);
-    };
-
-    ws.onclose = handleCloseOrError;
-    ws.onerror = handleCloseOrError;
-
-  }, [node.ip]);
+        onStatusChange(node.id, 'Offline');
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = setTimeout(connect, 60000);
+    }
+  }, [node.ip, node.id, onStatusChange]);
 
   useEffect(() => {
     connect();
@@ -430,7 +445,9 @@ const NodeDataRow = ({ node }: { node: Node }) => {
       </TableCell>
     </TableRow>
   );
-};
+});
+
+NodeDataRow.displayName = 'NodeDataRow';
 
 
 export default function NodesPage() {
@@ -438,24 +455,76 @@ export default function NodesPage() {
   const firestore = isFirebaseEnabled ? useFirestore() : null;
   const nodesCollection = firestore ? collection(firestore, 'nodes') : null;
   const [snapshot, loading, error] = useCollection(nodesCollection);
+  
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [locationFilter, setLocationFilter] = useState('All');
+  const [sortOption, setSortOption] = useState('name-asc');
+  
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({});
+  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
+
+  const handleStatusChange = useCallback((nodeId: string, status: NodeStatus) => {
+    setNodeStatuses(prev => ({...prev, [nodeId]: status}));
+  }, []);
+
   const nodesPerPage = 10;
   
-  const allNodes = isFirebaseEnabled 
+  const allNodes = useMemo(() => isFirebaseEnabled 
     ? snapshot?.docs.map(transformFirestoreData) || []
-    : mockNodes;
+    : mockNodes, [isFirebaseEnabled, snapshot]);
 
-  const totalPages = Math.ceil(allNodes.length / nodesPerPage);
-  const paginatedNodes = allNodes.slice(
+  const filteredAndSortedNodes = useMemo(() => {
+    return allNodes
+      .filter(node => {
+        const searchLower = searchTerm.toLowerCase();
+        const nameMatch = node.name.toLowerCase().includes(searchLower);
+        const ipMatch = node.ip.toLowerCase().includes(searchLower);
+        const statusMatch = statusFilter === 'All' || (nodeStatuses[node.id] || node.status) === statusFilter;
+        const locationMatch = locationFilter === 'All' || node.location.city === locationFilter;
+        return (nameMatch || ipMatch) && statusMatch && locationMatch;
+      })
+      .sort((a, b) => {
+        const [key, direction] = sortOption.split('-');
+        let comparison = 0;
+        const valA = (a as any)[key];
+        const valB = (b as any)[key];
+
+        if (valA > valB) comparison = 1;
+        else if (valA < valB) comparison = -1;
+        
+        return direction === 'desc' ? comparison * -1 : comparison;
+      });
+  }, [allNodes, searchTerm, statusFilter, locationFilter, sortOption, nodeStatuses]);
+
+  const totalPages = Math.ceil(filteredAndSortedNodes.length / nodesPerPage);
+  const paginatedNodes = filteredAndSortedNodes.slice(
       (currentPage - 1) * nodesPerPage,
       currentPage * nodesPerPage
   );
+
+  const filterPills = useMemo(() => {
+    const onlineCount = Object.values(nodeStatuses).filter(s => s === 'Online').length;
+    const offlineCount = Object.values(nodeStatuses).filter(s => s === 'Offline').length;
+    const maintCount = Object.values(nodeStatuses).filter(s => s === 'Maint.').length;
+    
+    return [
+      { label: 'All', status: 'All' },
+      { label: 'Online', count: onlineCount, status: 'Online' },
+      { label: 'Offline', count: offlineCount, status: 'Offline' },
+      { label: 'Maintenance', count: maintCount, status: 'Maint.' },
+    ];
+  }, [nodeStatuses]);
+
+  const locations = useMemo(() => ['All', ...new Set(allNodes.map(node => node.location.city))], [allNodes]);
     
   if (isFirebaseEnabled && error) {
     return <div>Error: {error.message}</div>;
   }
 
   return (
+    <>
     <div className="flex flex-col gap-8 max-w-7xl mx-auto">
       {/* Header */}
       <div>
@@ -479,11 +548,16 @@ export default function NodesPage() {
               Manage and monitor your server fleet
             </p>
           </div>
-          <Button asChild>
-            <Link href="/nodes/create">
-              <Plus size={20} className="mr-2" /> Create New Node
-            </Link>
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button variant="outline" onClick={() => setIsAddLocationOpen(true)}>
+                <MapPin size={20} className="mr-2" /> Add New Location
+            </Button>
+            <Button asChild>
+              <Link href="/nodes/create">
+                <Plus size={20} className="mr-2" /> Create New Node
+              </Link>
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -497,23 +571,46 @@ export default function NodesPage() {
           <Input
             placeholder="Search nodes by name, IP, or tag..."
             className="pl-10 bg-card-dark border-border-dark h-12"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         <div className="flex items-center gap-4 w-full md:w-auto">
-          <Button
-            variant="outline"
-            className="w-full md:w-auto justify-center h-12 bg-card-dark border-border-dark"
-          >
-            <MapPin size={18} className="mr-2" />
-            Filter by location
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full md:w-auto justify-center h-12 bg-card-dark border-border-dark"
-          >
-            <ListFilter size={18} className="mr-2" />
-            Sort
-          </Button>
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full md:w-auto justify-center h-12 bg-card-dark border-border-dark">
+                      <MapPin size={18} className="mr-2" />
+                      Filter by location
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56">
+                  <DropdownMenuLabel>Location</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={locationFilter} onValueChange={setLocationFilter}>
+                      {locations.map(loc => (
+                          <DropdownMenuRadioItem key={loc} value={loc}>{loc}</DropdownMenuRadioItem>
+                      ))}
+                  </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full md:w-auto justify-center h-12 bg-card-dark border-border-dark">
+                      <ListFilter size={18} className="mr-2" />
+                      Sort
+                  </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56">
+                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuRadioGroup value={sortOption} onValueChange={setSortOption}>
+                      <DropdownMenuRadioItem value="name-asc">Name (A-Z)</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="name-desc">Name (Z-A)</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="status-asc">Status</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -522,25 +619,26 @@ export default function NodesPage() {
         {filterPills.map((pill) => (
           <Button
             key={pill.label}
-            variant={pill.active ? 'default' : 'outline'}
+            variant={statusFilter === pill.status ? 'default' : 'outline'}
             size="sm"
+            onClick={() => setStatusFilter(pill.status)}
             className={cn(
               'rounded-full h-auto px-4 py-2 text-sm',
-              !pill.active && 'bg-card-dark border-border-dark'
+              statusFilter !== pill.status && 'bg-card-dark border-border-dark'
             )}
           >
-            {pill.status && (
+            {pill.status && pill.status !== 'All' && (
               <span className="flex items-center gap-2 mr-2">
                 <span
                   className={cn(
                     'size-2 rounded-full',
-                    statusStyles[pill.status].dot
+                    statusStyles[pill.status as NodeStatus]?.dot
                   )}
                 />
               </span>
             )}
             {pill.label}
-            {pill.count && (
+            {pill.count !== undefined && (
               <span className="ml-2 text-text-secondary">{pill.count}</span>
             )}
           </Button>
@@ -568,7 +666,7 @@ export default function NodesPage() {
                 </TableRow>
             )}
             { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => (
-                <NodeDataRow key={node.id} node={node} />
+                <NodeDataRow key={node.id} node={node} onStatusChange={handleStatusChange} />
             ))}
              { !loading && paginatedNodes.length === 0 && (
                 <TableRow>
@@ -584,7 +682,7 @@ export default function NodesPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-text-secondary">
-            <div>Showing {paginatedNodes.length} of {allNodes.length} nodes</div>
+            <div>Showing {paginatedNodes.length} of {filteredAndSortedNodes.length} nodes</div>
             <Pagination>
             <PaginationContent>
                 <PaginationItem>
@@ -626,5 +724,7 @@ export default function NodesPage() {
         </div>
       )}
     </div>
+    <AddLocationDialog isOpen={isAddLocationOpen} onOpenChange={setIsAddLocationOpen} />
+    </>
   );
 }
