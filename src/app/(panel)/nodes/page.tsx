@@ -181,6 +181,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
     if (!node.ip || (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)) {
@@ -199,8 +200,10 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     const clearTimers = () => {
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         pingIntervalRef.current = null;
         timeoutRef.current = null;
+        reconnectTimeoutRef.current = null;
     };
     
     const setupPing = () => {
@@ -211,8 +214,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
 
                 timeoutRef.current = setTimeout(() => {
                     setStatus('Offline');
-                    clearTimers();
-                    ws.close();
+                    ws.close(); // This will trigger onclose and schedule a reconnect
                 }, 30000); 
             }
         }, 30000);
@@ -221,7 +223,6 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     ws.onopen = () => {
         console.log(`WebSocket connected to ${node.ip}`);
         ws.send(JSON.stringify({ type: 'health' }));
-        // Initial timeout to ensure first response
         timeoutRef.current = setTimeout(() => {
             setStatus('Offline');
             ws.close();
@@ -234,18 +235,25 @@ const NodeDataRow = ({ node }: { node: Node }) => {
         try {
             const data = JSON.parse(event.data);
             if (data.type === 'health_response') {
+                let newStatus: NodeStatus;
                 if (data.status === 'healthy') {
-                    if (status !== 'Online') {
-                        setStatus('Online');
-                        setupPing();
-                    }
+                    newStatus = 'Online';
                 } else if (data.status === 'maintenance') {
-                    setStatus('Maint.');
-                    clearTimers();
+                    newStatus = 'Maint.';
                 } else {
-                    setStatus('Offline');
+                    newStatus = 'Offline';
+                }
+
+                if (status !== newStatus) {
+                    setStatus(newStatus);
+                }
+
+                if (newStatus === 'Online') {
+                    setupPing();
+                } else {
                     clearTimers();
                 }
+
                 setCurrentNode(prev => ({
                     ...prev,
                     cpu: data.cpu?.usage ?? data.memory?.usage,
@@ -261,9 +269,16 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     };
     
     const handleCloseOrError = () => {
-      console.log(`WebSocket disconnected from ${node.ip}`);
-      setStatus('Offline');
-      clearTimers();
+        console.log(`WebSocket disconnected from ${node.ip}`);
+        clearTimers();
+        if (status !== 'Offline') {
+            setStatus('Offline');
+        }
+        
+        // Schedule a reconnect attempt after 30 seconds
+        reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+        }, 30000);
     };
 
     ws.onclose = handleCloseOrError;
@@ -275,6 +290,7 @@ const NodeDataRow = ({ node }: { node: Node }) => {
     return () => {
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (wsRef.current) {
             wsRef.current.close();
         }
