@@ -152,13 +152,13 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
           const m = Math.floor(uptimeSeconds % 3600 / 60);
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-        } else if (data.type === 'logs_response' && Array.isArray(data.logs)) {
-            const newLogs: LogEntry[] = data.logs.map((log: string) => ({
-                time: new Date().toLocaleTimeString('en-GB'),
-                level: 'INFO', // Or parse from log string if possible
-                message: log,
-            }));
-            setLogs(prev => [...prev, ...newLogs]);
+        } else if (data.type === 'container_exec_output') {
+          const newLog: LogEntry = {
+              time: new Date().toLocaleTimeString('en-GB'),
+              level: 'INFO',
+              message: data.data,
+          };
+          setLogs(prev => [...prev, newLog]);
         } else if (data.log) { // Handle unsolicited log messages
             const newLog: LogEntry = {
                 time: new Date().toLocaleTimeString('en-GB'),
