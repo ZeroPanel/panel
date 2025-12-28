@@ -54,6 +54,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AddLocationDialog } from '@/components/nodes/add-location-dialog';
 
 type NodeStatus = 'Online' | 'Offline' | 'Maint.' | 'Connecting';
 
@@ -188,9 +189,8 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      return;
     }
   
     if (!node.ip) {
@@ -445,6 +445,7 @@ export default function NodesPage() {
   const [sortOption, setSortOption] = useState('name-asc');
   
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({});
+  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
 
   const handleStatusChange = useCallback((nodeId: string, status: NodeStatus) => {
     setNodeStatuses(prev => ({...prev, [nodeId]: status}));
@@ -506,7 +507,7 @@ export default function NodesPage() {
 
   return (
     <>
-    <div className="flex flex-col gap-8 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-8 max-w-7xl mx-auto overflow-x-hidden p-4 md:p-0">
       {/* Header */}
       <div>
         <Breadcrumb>
@@ -530,6 +531,9 @@ export default function NodesPage() {
             </p>
           </div>
           <div className='flex items-center gap-2'>
+            <Button variant="outline" onClick={() => setIsAddLocationOpen(true)}>
+                <MapPin size={20} className="mr-2" /> Add New Location
+            </Button>
             <Button asChild>
               <Link href="/nodes/create">
                 <Plus size={20} className="mr-2" /> Create New Node
@@ -701,6 +705,7 @@ export default function NodesPage() {
         </div>
       )}
     </div>
+    <AddLocationDialog isOpen={isAddLocationOpen} onOpenChange={setIsAddLocationOpen} />
     </>
   );
 }

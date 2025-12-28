@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useCollection } from '@/firebase';
 import { addDoc, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -62,6 +62,8 @@ type SystemInfo = {
     };
 };
 
+type Location = { id: string, city: string; flag: string };
+
 export default function CreateNodePage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -69,7 +71,7 @@ export default function CreateNodePage() {
   const firestore = isFirebaseEnabled ? useFirestore() : null;
 
   const [nodeName, setNodeName] = useState('');
-  const [location, setLocation] = useState('us-nyc-01');
+  const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
   const [useSsl, setUseSsl] = useState(true);
@@ -82,12 +84,25 @@ export default function CreateNodePage() {
   const [cpuInfo, setCpuInfo] = useState<{ model: string; count: number } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const locationsCollection = firestore ? collection(firestore, 'locations') : null;
+  const [locationsSnapshot] = useCollection(locationsCollection);
+  const [locations, setLocations] = useState<Location[]>([]);
 
-  const locations = {
-    'us-nyc-01': { city: 'New York', flag: '🇺🇸' },
-    'de-fra-01': { city: 'Frankfurt', flag: '🇩🇪' },
-    'jp-tok-01': { city: 'Tokyo', flag: '🇯🇵' },
-  };
+  useEffect(() => {
+    if (locationsSnapshot) {
+      const fetchedLocations = locationsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        city: doc.data().city,
+        flag: doc.data().flag
+      }));
+      setLocations(fetchedLocations);
+      if (fetchedLocations.length > 0 && !location) {
+        setLocation(fetchedLocations[0].id);
+      }
+    }
+  }, [locationsSnapshot, location]);
+
 
   const handleCreateNode = async () => {
     if (!firestore) {
@@ -109,10 +124,12 @@ export default function CreateNodePage() {
 
     setIsSubmitting(true);
     
+    const selectedLocation = locations.find(l => l.id === location);
+
     const newNode = {
         name: nodeName,
         ip: fqdn,
-        location: locations[location as keyof typeof locations],
+        location: selectedLocation ? { city: selectedLocation.city, flag: selectedLocation.flag } : null,
         status: 'Offline', // Will be updated by health check on the nodes page
         description,
         isPublic,
@@ -305,8 +322,8 @@ export default function CreateNodePage() {
                         <SelectValue placeholder="Select a location" />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(locations).map(([key, loc]) => (
-                            <SelectItem key={key} value={key}>{loc.city}, {key.split('-')[0].toUpperCase()}</SelectItem>
+                        {locations.map((loc) => (
+                            <SelectItem key={loc.id} value={loc.id}>{loc.city}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -453,5 +470,3 @@ export default function CreateNodePage() {
     </>
   );
 }
-
-    

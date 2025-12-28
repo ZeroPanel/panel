@@ -68,6 +68,26 @@
         }
       },
       "required": ["name", "ip", "location", "status"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "Represents a geographical location for a node.",
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "The name of the city."
+        },
+        "country": {
+          "type": "string",
+          "description": "The name of the country."
+        },
+        "flag": {
+          "type": "string",
+          "description": "The emoji flag of the country."
+        }
+      },
+      "required": ["city", "country", "flag"]
     }
   },
   "auth": {
@@ -79,6 +99,12 @@
         "$ref": "#/entities/Node"
       },
       "description": "Stores information about individual server nodes."
+    },
+    "/locations/{locationId}": {
+      "schema": {
+        "$ref": "#/entities/Location"
+      },
+      "description": "Stores available geographical locations for nodes."
     }
   }
 }
