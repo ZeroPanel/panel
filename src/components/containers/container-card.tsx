@@ -56,11 +56,12 @@ export function ContainerCard({ container }: { container: Container }) {
     useEffect(() => {
         if (currentStatus === 'Starting' && nodeIp && container.containerId) {
             const connectStatus = () => {
-                const wsUrl = `wss://${nodeIp}/containers/${container.containerId}/status`;
+                const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
                 healthWsRef.current = new WebSocket(wsUrl);
 
                 healthWsRef.current.onopen = () => {
                     console.log(`Status WS connected for ${container.name} at ${wsUrl}`);
+                    healthWsRef.current?.send(JSON.stringify({ type: 'container_info' }));
                 };
 
                 healthWsRef.current.onmessage = (event) => {
