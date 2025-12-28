@@ -128,7 +128,7 @@ export default function CreateContainerPage() {
     
     const selectedNode = nodes.find(n => n.id === node);
 
-    const newContainer = {
+    const containerBaseData = {
         name: containerName,
         image: dockerImage,
         node: node,
@@ -161,18 +161,65 @@ export default function CreateContainerPage() {
             ws.send(JSON.stringify(payload));
             console.log('Container creation request sent to node:', payload);
         };
+
         ws.onmessage = (event) => {
             console.log('Message from node:', event.data);
-            // You can add logic here to handle responses from the node, e.g., deployment status
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'success' && message.containerId) {
+                    const finalContainerData = {
+                        ...containerBaseData,
+                        containerId: message.containerId
+                    };
+                    
+                    const containersCollection = collection(firestore, 'containers');
+                    addDoc(containersCollection, finalContainerData)
+                        .then(() => {
+                             toast({
+                                title: "Container Deployment Started",
+                                description: `The container "${containerName}" is being deployed.`,
+                            });
+                            router.push('/containers');
+                        })
+                        .catch(async (serverError) => {
+                            const permissionError = new FirestorePermissionError({
+                                path: containersCollection.path,
+                                operation: 'create',
+                                requestResourceData: finalContainerData,
+                            } satisfies SecurityRuleContext);
+
+                            errorEmitter.emit('permission-error', permissionError);
+                             toast({
+                                variant: "destructive",
+                                title: "Firestore Error",
+                                description: "Failed to save container to database after successful deployment.",
+                            });
+                            setIsSubmitting(false);
+                        });
+                } else if (message.type === 'error') {
+                    toast({
+                        variant: 'destructive',
+                        title: 'Deployment Failed on Node',
+                        description: message.error || 'An unknown error occurred on the node.'
+                    });
+                    setIsSubmitting(false);
+                }
+            } catch (e) {
+                console.error("Error parsing message from node:", e);
+                // Handle non-json messages if necessary
+            }
         };
+
         ws.onerror = (error) => {
             console.error('WebSocket Error:', error);
             toast({
                 variant: 'destructive',
                 title: 'Node Connection Failed',
-                description: `Could not connect to the deployment node ${selectedNode.name}. The container record was saved, but deployment may not have started.`
+                description: `Could not connect to the deployment node ${selectedNode.name}.`
             });
+            setIsSubmitting(false);
         };
+
         ws.onclose = () => {
             console.log(`Connection to node ${selectedNode.name} closed.`);
         };
@@ -182,35 +229,7 @@ export default function CreateContainerPage() {
             title: 'Node IP Missing',
             description: 'The selected node does not have an IP address configured. Cannot initiate deployment.'
         });
-    }
-
-    try {
-      const containersCollection = collection(firestore, 'containers');
-      addDoc(containersCollection, newContainer)
-        .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-            path: containersCollection.path,
-            operation: 'create',
-            requestResourceData: newContainer,
-            } satisfies SecurityRuleContext);
-
-            errorEmitter.emit('permission-error', permissionError);
-        });
-
-      toast({
-        title: "Container Deployment Started",
-        description: `The container "${containerName}" is being deployed.`,
-      });
-      router.push('/containers');
-
-    } catch (e) {
-      console.error("Error adding document: ", e);
-      toast({
-        variant: "destructive",
-        title: "Deployment Failed",
-        description: "An unexpected error occurred while creating the container.",
-      });
-      setIsSubmitting(false);
+        setIsSubmitting(false);
     }
   };
 

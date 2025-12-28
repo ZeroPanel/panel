@@ -1,0 +1,214 @@
+
+{
+  "entities": {
+    "Node": {
+      "title": "Node",
+      "description": "Represents a server node in the infrastructure.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the node."
+        },
+        "ip": {
+          "type": "string",
+          "description": "The IP address of the node."
+        },
+        "location": {
+          "type": "object",
+          "properties": {
+            "city": {
+              "type": "string"
+            },
+            "flag": {
+              "type": "string"
+            }
+          },
+          "required": ["city", "flag"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Online", "Offline", "Maint."],
+          "description": "The current status of the node."
+        },
+        "cpu": {
+          "type": "number",
+          "description": "The current CPU usage percentage."
+        },
+        "ram": {
+          "type": "object",
+          "properties": {
+            "current": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "required": ["current", "max"]
+        },
+        "disk": {
+          "type": "object",
+          "properties": {
+            "current": {
+              "type": ["number", "string"]
+            },
+            "max": {
+              "type": "number"
+            },
+            "unit": {
+              "type": "string",
+              "enum": ["GB", "TB"]
+            },
+            "isUsage": {
+                "type": "boolean"
+            }
+          },
+          "required": ["current", "unit"]
+        }
+      },
+      "required": ["name", "ip", "location", "status"]
+    },
+    "Location": {
+      "title": "Location",
+      "description": "Represents a geographical location for a node.",
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "The name of the city."
+        },
+        "country": {
+          "type": "string",
+          "description": "The name of the country."
+        },
+        "flag": {
+          "type": "string",
+          "description": "The emoji flag of the country."
+        }
+      },
+      "required": ["city", "country", "flag"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the admin panel.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["Admin", "User", "Viewer"],
+          "description": "The role of the user."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Active", "Suspended", "Invited"],
+          "description": "The status of the user account."
+        },
+        "lastLogin": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The last time the user logged in."
+        },
+        "avatar": {
+            "type": "string",
+            "description": "URL to the user's avatar image."
+        }
+      },
+      "required": ["name", "email", "role", "status"]
+    },
+    "Container": {
+        "title": "Container",
+        "description": "Represents a Docker container instance.",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the container."
+            },
+            "image": {
+                "type": "string",
+                "description": "The Docker image used by the container."
+            },
+            "status": {
+                "type": "string",
+                "enum": ["Running", "Stopped", "Starting"],
+                "description": "The current status of the container."
+            },
+            "node": {
+                "type": "string",
+                "description": "The ID of the node this container is running on."
+            },
+            "nodeName": {
+                "type": "string",
+                "description": "The name of the node this container is running on."
+            },
+            "cpuUsage": {
+                "type": "number",
+                "description": "The current CPU usage percentage."
+            },
+            "ramUsage": {
+                "type": "number",
+                "description": "The current RAM usage in MB."
+            },
+            "userId": {
+                "type": "string",
+                "description": "The ID of the user this container is assigned to."
+            },
+            "ports": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "public": { "type": "number" },
+                        "private": { "type": "number" }
+                    },
+                    "required": ["public", "private"]
+                }
+            },
+            "containerId": {
+              "type": "string",
+              "description": "The runtime ID of the container from the node."
+            }
+        },
+        "required": ["name", "image", "status", "node"]
+    }
+  },
+  "auth": {
+    "providers": []
+  },
+  "firestore": {
+    "/nodes/{nodeId}": {
+      "schema": {
+        "$ref": "#/entities/Node"
+      },
+      "description": "Stores information about individual server nodes."
+    },
+    "/locations/{locationId}": {
+      "schema": {
+        "$ref": "#/entities/Location"
+      },
+      "description": "Stores available geographical locations for nodes."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profiles for the application."
+    },
+    "/containers/{containerId}": {
+        "schema": {
+            "$ref": "#/entities/Container"
+        },
+        "description": "Stores information about Docker container instances."
+    }
+  }
+}

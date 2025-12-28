@@ -1,3 +1,4 @@
+
 'use client'
 
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export function UserServerCard({ server }: { server: Server }) {
                 <div className="flex justify-between items-start">
                     <div className="flex gap-4">
                         <div className={`relative size-12 rounded-lg bg-cover bg-center shrink-0 shadow-inner ${server.status === 'Stopped' ? 'grayscale opacity-70' : ''}`}>
-                             <Image src={server.image} alt={`${server.name} icon`} layout="fill" className="rounded-lg" />
+                             <Image src={server.image} alt={`${server.name} icon`} fill={true} sizes="100vw" className="rounded-lg" />
                             <div className={`absolute -bottom-1 -right-1 size-3.5 ${statusConfig.dot} rounded-full border-2 border-card-dark`}></div>
                         </div>
                         <div className="flex flex-col">
