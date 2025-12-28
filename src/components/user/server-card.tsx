@@ -2,8 +2,7 @@
 'use client'
 
 import { Button } from "@/components/ui/button";
-import { Play, RefreshCw, StopCircle, Terminal } from "lucide-react";
-import Image from "next/image";
+import { Play, RefreshCw, StopCircle, Terminal, Box } from "lucide-react";
 import Link from 'next/link';
 
 type ServerStatus = "Running" | "Stopped" | "Building";
@@ -60,8 +59,8 @@ export function UserServerCard({ server }: { server: Server }) {
                 {/* Header */}
                 <div className="flex justify-between items-start">
                     <div className="flex gap-4">
-                        <div className={`relative size-12 rounded-lg bg-cover bg-center shrink-0 shadow-inner ${server.status === 'Stopped' ? 'grayscale opacity-70' : ''}`}>
-                             <Image src={server.image} alt={`${server.name} icon`} fill sizes="100vw" className="rounded-lg" />
+                        <div className={`relative size-12 rounded-lg bg-card-dark/50 flex items-center justify-center shrink-0 shadow-inner ring-1 ring-border-dark ${server.status === 'Stopped' ? 'grayscale opacity-70' : ''}`}>
+                             <Box size={28} className="text-primary" />
                             <div className={`absolute -bottom-1 -right-1 size-3.5 ${statusConfig.dot} rounded-full border-2 border-card-dark`}></div>
                         </div>
                         <div className="flex flex-col">
