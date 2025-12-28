@@ -124,6 +124,43 @@
         }
       },
       "required": ["name", "email", "role", "status"]
+    },
+    "Container": {
+        "title": "Container",
+        "description": "Represents a Docker container instance.",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the container."
+            },
+            "image": {
+                "type": "string",
+                "description": "The Docker image used by the container."
+            },
+            "status": {
+                "type": "string",
+                "enum": ["Running", "Stopped", "Starting"],
+                "description": "The current status of the container."
+            },
+            "node": {
+                "type": "string",
+                "description": "The ID of the node this container is running on."
+            },
+            "nodeName": {
+                "type": "string",
+                "description": "The name of the node this container is running on."
+            },
+            "cpuUsage": {
+                "type": "number",
+                "description": "The current CPU usage percentage."
+            },
+            "ramUsage": {
+                "type": "number",
+                "description": "The current RAM usage in MB."
+            }
+        },
+        "required": ["name", "image", "status", "node"]
     }
   },
   "auth": {
@@ -147,6 +184,12 @@
         "$ref": "#/entities/User"
       },
       "description": "Stores user profiles for the application."
+    },
+    "/containers/{containerId}": {
+        "schema": {
+            "$ref": "#/entities/Container"
+        },
+        "description": "Stores information about Docker container instances."
     }
   }
 }
