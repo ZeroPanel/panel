@@ -4,7 +4,7 @@
 import type { Container } from '@/app/(panel)/containers/page';
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
-import { Box, Cpu, MemoryStick, Play, RefreshCw, StopCircle, Server, Trash2 } from "lucide-react";
+import { Box, Cpu, MemoryStick, Play, RefreshCw, StopCircle, Server, Trash2, Terminal } from "lucide-react";
 import Link from 'next/link';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting';
@@ -95,9 +95,17 @@ export function ContainerCard({ container }: { container: Container }) {
                         <RefreshCw size={20} />
                     </Button>
                 </div>
-                <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-rose-500/20 text-text-secondary hover:text-rose-400" title="Delete">
-                    <Trash2 size={18} />
-                </Button>
+                 <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="p-2 rounded-lg hover:bg-rose-500/20 text-text-secondary hover:text-rose-400" title="Delete">
+                        <Trash2 size={18} />
+                    </Button>
+                     <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={container.status === 'Stopped'}>
+                        <Link href={`/server/${container.id}/console`}>
+                        <Terminal size={16} />
+                        Console
+                        </Link>
+                    </Button>
+                </div>
             </div>
         </div>
     );
