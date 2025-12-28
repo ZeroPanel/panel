@@ -188,8 +188,9 @@ const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatus
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const connect = useCallback(() => {
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
-        return; 
+    if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
     }
   
     if (!node.ip) {
@@ -703,5 +704,3 @@ export default function NodesPage() {
     </>
   );
 }
-
-    
