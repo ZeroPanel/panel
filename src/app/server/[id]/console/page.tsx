@@ -26,8 +26,6 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import 'xterm/css/xterm.css';
-import type { Terminal as XtermTerminal } from 'xterm';
 import '../../../globals.css'
 import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 

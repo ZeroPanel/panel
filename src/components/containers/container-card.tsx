@@ -56,7 +56,7 @@ export function ContainerCard({ container }: { container: Container }) {
     useEffect(() => {
         if (!nodeIp || !container.containerId) return;
 
-        const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+        const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
         
         // Prevent re-creating the connection if it's already open or connecting
         if (healthWsRef.current && healthWsRef.current.readyState < 2) {
