@@ -105,7 +105,14 @@
     @apply !bg-card-dark;
      scrollbar-width: none; /* Firefox */
   }
-  
+
+  .terminal {
+    @apply !bg-card-dark;
+     scrollbar-width: none; /* Firefox */
+  }
+  .terminal::-webkit-scrollbar {
+    display: none; /* Safari and Chrome */
+}
   .xterm-viewport::-webkit-scrollbar {
       display: none; /* Safari and Chrome */
   }
