@@ -98,24 +98,38 @@
   }
   .xterm {
     @apply p-4 rounded-b-lg;
-    overflow: hidden;
+    overflow: hidden !important;
   }
 
   .xterm-viewport {
     @apply !bg-card-dark;
-     scrollbar-width: none; /* Firefox */
+     scrollbar-width: none !important; /* Firefox */
   }
 
   .terminal {
     @apply !bg-card-dark;
-     scrollbar-width: none; /* Firefox */
+     scrollbar-width: none !important; /* Firefox */
   }
   .terminal::-webkit-scrollbar {
-    display: none; /* Safari and Chrome */
+    display: none !important; /* Safari and Chrome */
 }
   .xterm-viewport::-webkit-scrollbar {
       display: none; /* Safari and Chrome */
   }
+  .no-scrollbar{
+    @apply !bg-card-dark;
+    scrollbar-width: none !important; /* Firefox */
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none !important; /* Safari and Chrome */
+  }
+
+  ::-webkit-scrollbar{
+    display: none;
+  }
+
+
 }
 
 @layer components {

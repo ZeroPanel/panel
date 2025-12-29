@@ -1,4 +1,5 @@
 
+
 'use client';
 import {
   Breadcrumb,
@@ -31,6 +32,7 @@ import { Xterm } from 'xterm-react';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import type { Terminal as XtermTerminal } from 'xterm';
+import '../../../globals.css'
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
 
@@ -53,9 +55,10 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }) => {
+const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
+  const containerId = id;
   
   const containerRef = useMemo(() => 
     firestore && containerId ? doc(firestore, 'containers', containerId) : null, 
@@ -121,10 +124,10 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
 
   // WebSocket for health/stats and logs
   useEffect(() => {
-    if (!nodeIp || !container?.containerId || !xtermRef.current) return;
+    if (!nodeIp || !container?.containerId || !xtermRef.current?.terminal) return;
 
     const term = xtermRef.current.terminal;
-    const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+    const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
     
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
@@ -162,7 +165,10 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
               term.write(data.log.replace(/\n/g, '\r\n'));
           }
         } catch(e) {
-          console.error("Could not parse ws message", e);
+          // This can happen if the message is not JSON, e.g. initial connection logs
+          if(typeof event.data === 'string') {
+              term.write(event.data.replace(/\n/g, '\r\n'));
+          }
         }
       };
 
@@ -308,11 +314,12 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
             <CardTitle>Server Console</CardTitle>
           </div>
         </CardHeader>
-        <div className="flex-grow overflow-hidden p-0 rounded-b-lg">
+        {/* Hide scrollbar using the style tag */}
+        <div className="flex-grow overflow-hidden p-0 rounded-b-lg" style={{ overflowY: 'hidden' }}>
             <Xterm
                 ref={xtermRef}
                 addons={[fitAddonRef.current]}
-                className="w-full h-full"
+                className="w-full h-full no-scrollbar"
                 options={{
                     theme: {
                         background: '#111827', // bg-card-dark
@@ -348,3 +355,5 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
 };
 
 export default ConsolePage;
+
+    
