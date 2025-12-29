@@ -115,20 +115,65 @@ export function AdminForm() {
   const watchedBackend = useWatch({ control, name: "backend" });
   const isEnabled = useWatch({ control, name: "enabled" });
 
+  // Safely extract and parse a Firebase config object from pasted text.
+  function parseFirebaseConfigFromText(text: string): Record<string, unknown> | null {
+    const start = text.indexOf("{");
+    if (start === -1) {
+      return null;
+    }
+
+    // Find the matching closing brace for the first opening brace.
+    let depth = 0;
+    let end = -1;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === "{") {
+        depth += 1;
+      } else if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (end === -1) {
+      return null;
+    }
+
+    const objectLiteral = text.substring(start, end);
+
+    // Convert a simple JS object literal into JSON by quoting keys if needed.
+    // This is intentionally conservative and expects a standard Firebase config shape.
+    const jsonLike = objectLiteral
+      // add quotes around bareword keys: apiKey: "x" -> "apiKey": "x"
+      .replace(/([,{]\s*)([A-Za-z_$][A-Za-z0-9_$]*)(\s*:)/g, '$1"$2"$3');
+
+    try {
+      return JSON.parse(jsonLike);
+    } catch (_e) {
+      return null;
+    }
+  }
+
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       const text = event.clipboardData?.getData('text');
       if (text && text.includes('const firebaseConfig')) {
         try {
-           // Unsafe but effective way to parse a JS object literal
-          const parsedConfig = new Function(`return ${text.substring(text.indexOf('{'))}`)();
+          const parsedConfig = parseFirebaseConfigFromText(text);
 
-          if (parsedConfig.apiKey) setValue('config.firebase.apiKey', parsedConfig.apiKey);
-          if (parsedConfig.authDomain) setValue('config.firebase.authDomain', parsedConfig.authDomain);
-          if (parsedConfig.projectId) setValue('config.firebase.projectId', parsedConfig.projectId);
-          if (parsedConfig.storageBucket) setValue('config.firebase.storageBucket', parsedConfig.storageBucket);
-          if (parsedConfig.messagingSenderId) setValue('config.firebase.messagingSenderId', parsedConfig.messagingSenderId);
-          if (parsedConfig.appId) setValue('config.firebase.appId', parsedConfig.appId);
+          if (!parsedConfig) {
+            throw new Error("Unable to parse Firebase config from pasted text");
+          }
+
+          if ((parsedConfig as any).apiKey) setValue('config.firebase.apiKey', (parsedConfig as any).apiKey);
+          if ((parsedConfig as any).authDomain) setValue('config.firebase.authDomain', (parsedConfig as any).authDomain);
+          if ((parsedConfig as any).projectId) setValue('config.firebase.projectId', (parsedConfig as any).projectId);
+          if ((parsedConfig as any).storageBucket) setValue('config.firebase.storageBucket', (parsedConfig as any).storageBucket);
+          if ((parsedConfig as any).messagingSenderId) setValue('config.firebase.messagingSenderId', (parsedConfig as any).messagingSenderId);
+          if ((parsedConfig as any).appId) setValue('config.firebase.appId', (parsedConfig as any).appId);
           
           setValue('backend', 'firebase');
 
