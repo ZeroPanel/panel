@@ -167,11 +167,18 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
 
             const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
-            setCurrentStatus(newStatus);
+            if (newStatus !== currentStatus) {
+              setCurrentStatus(newStatus);
+            }
           } else if (data.type === 'container_exec_output') {
               term.write(data.data);
           } else if (data.log) {
               term.write(data.log.replace(/\n/g, '\r\n'));
+          } else if (data.type === 'container_status') {
+            const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
+            if (newStatus !== currentStatus) {
+                setCurrentStatus(newStatus);
+            }
           }
         } catch(e) {
           // This can happen if the message is not JSON, e.g. initial connection logs
@@ -202,7 +209,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         wsRef.current?.close();
     }
-  }, [nodeIp, container?.containerId]);
+  }, [nodeIp, container?.containerId, xtermRef.current]);
   
   const handleSendCommand = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current) {
@@ -370,5 +377,3 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
-
-    
