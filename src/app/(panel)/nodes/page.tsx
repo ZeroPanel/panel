@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -156,7 +157,7 @@ const statusStyles: Record<
     dot: 'bg-amber-500',
   },
   Connecting: {
-    icon: <Power size={14} />,
+    icon: <Power size={14} className="animate-pulse" />,
     text: 'text-amber-400',
     bg: 'bg-amber-500/10',
     dot: 'bg-amber-500 animate-pulse',
@@ -180,157 +181,104 @@ function transformFirestoreData(doc: DocumentData): Node {
     };
 }
 
-const NodeDataRow = React.memo(({ node, onStatusChange }: { node: Node; onStatusChange: (nodeId: string, status: NodeStatus) => void }) => {
+const NodeDataRow = React.memo(({ node }: { node: Node }) => {
   const [currentNode, setCurrentNode] = useState<Node>(node);
   const [status, setStatus] = useState<NodeStatus>('Connecting');
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+  useEffect(() => {
+    if (!node.ip) {
+      setStatus('Offline');
       return;
     }
   
-    if (!node.ip) {
-      setStatus('Offline');
-      onStatusChange(node.id, 'Offline');
-      return;
+    if (wsRef.current) {
+        return;
     }
 
-    if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-    }
+    const connect = () => {
+        try {
+            const ws = new WebSocket(`wss://${node.ip}/health`);
+            wsRef.current = ws;
 
-    setStatus('Connecting');
-    onStatusChange(node.id, 'Connecting');
+            setStatus('Connecting');
 
-    try {
-        const ws = new WebSocket(`wss://${node.ip}/health`);
-        wsRef.current = ws;
+            ws.onopen = () => {
+                console.log(`WebSocket connected to ${node.ip}`);
+                const healthPayload = JSON.stringify({ type: 'health' });
+                ws.send(healthPayload);
 
-        const clearTimers = () => {
-            if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            pingIntervalRef.current = null;
-            timeoutRef.current = null;
-        };
-        
-        const setupPing = () => {
-            clearTimers();
-            pingIntervalRef.current = setInterval(() => {
-                if (wsRef.current?.readyState === WebSocket.OPEN) {
-                    wsRef.current.send(JSON.stringify({ type: 'health' }));
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                pingIntervalRef.current = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(healthPayload);
+                    }
+                }, 30000);
+            };
 
-                    timeoutRef.current = setTimeout(() => {
-                        if(wsRef.current === ws) {
-                          ws.close();
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'health_response') {
+                        let newStatus: NodeStatus = 'Offline';
+                        if(data.maintenance?.enabled) {
+                            newStatus = 'Maint.';
+                        } else if (data.status === 'healthy') {
+                            newStatus = 'Online';
                         }
-                    }, 30000); 
-                }
-            }, 30000);
-        };
-
-        ws.onopen = () => {
-            if(wsRef.current !== ws) return;
-            console.log(`WebSocket connected to ${node.ip}`);
-            ws.send(JSON.stringify({ type: 'health' }));
-            timeoutRef.current = setTimeout(() => {
-              if(wsRef.current === ws) ws.close();
-            }, 30000);
-        };
-
-        ws.onmessage = (event) => {
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            if(wsRef.current !== ws) return; 
-
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'health_response') {
-                    let newStatus: NodeStatus;
-                    if(data.maintenance?.enabled) {
-                        newStatus = 'Maint.';
-                    } else if (data.status === 'healthy') {
-                        newStatus = 'Online';
-                    } else {
-                        newStatus = 'Offline';
+                        
+                        setStatus(newStatus);
+                        
+                        setCurrentNode(prev => ({
+                            ...prev,
+                            cpu: data.memory?.usage,
+                            ram: data.memory ? {
+                                current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
+                                max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
+                            } : prev.ram,
+                            disk: data.storage ? {
+                                current: data.storage.percent,
+                                isUsage: true,
+                                unit: 'GB',
+                            } : prev.disk,
+                        }));
                     }
-
-                    setStatus(newStatus);
-                    onStatusChange(node.id, newStatus);
-
-
-                    if (newStatus === 'Online') {
-                        setupPing();
-                    } else {
-                        clearTimers();
-                    }
-
-                    setCurrentNode(prev => ({
-                        ...prev,
-                        cpu: data.memory?.usage,
-                        ram: data.memory ? {
-                            current: parseFloat(((data.memory.total - data.memory.free) / (1024 ** 3)).toFixed(1)),
-                            max: parseFloat((data.memory.total / (1024 ** 3)).toFixed(1))
-                        } : prev.ram,
-                        disk: data.storage ? {
-                            current: data.storage.percent,
-                            isUsage: true,
-                            unit: 'GB',
-                        } : prev.disk,
-                    }));
+                } catch (e) {
+                    console.error("Failed to parse health check response", e);
                 }
-            } catch (e) {
-                console.error("Failed to parse health check response", e);
-            }
-        };
-        
-        const handleCloseOrError = (event: Event | CloseEvent) => {
-            if (wsRef.current !== ws) return;
-            console.log(`WebSocket disconnected from ${node.ip}.`, event);
+            };
+            
+            ws.onclose = () => {
+                console.log(`WebSocket disconnected from ${node.ip}.`);
+                setStatus('Offline');
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                 // Optional: implement reconnect logic here if desired
+            };
 
-            clearTimers();
+            ws.onerror = (error) => {
+                console.error(`WebSocket error for ${node.ip}:`, error);
+                setStatus('Offline');
+                if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+                ws.close();
+            };
+
+        } catch (e) {
+            console.error("Failed to create WebSocket:", e);
             setStatus('Offline');
-            onStatusChange(node.id, 'Offline');
-            
-            setCurrentNode(prev => ({ ...prev, cpu: null, ram: null, disk: null }));
-            
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-            reconnectTimeoutRef.current = setTimeout(() => {
-                connect();
-            }, 60000); // 1 minute delay
-        };
-
-        ws.onclose = handleCloseOrError;
-        ws.onerror = handleCloseOrError as any;
-
-    } catch (e) {
-        console.error("Failed to create WebSocket:", e);
-        setStatus('Offline');
-        onStatusChange(node.id, 'Offline');
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = setTimeout(connect, 60000);
+        }
     }
-  }, [node.ip, node.id, onStatusChange]);
-
-  useEffect(() => {
+    
     connect();
+
     return () => {
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (wsRef.current) {
-            wsRef.current.onclose = null;
-            wsRef.current.onerror = null;
             wsRef.current.close();
             wsRef.current = null;
         }
     };
-  }, [connect]);
+  }, [node.ip, node.id]);
 
   const statusConfig = statusStyles[status];
   const isOnline = status === 'Online' || status === 'Maint.';
@@ -444,12 +392,7 @@ export default function NodesPage() {
   const [locationFilter, setLocationFilter] = useState('All');
   const [sortOption, setSortOption] = useState('name-asc');
   
-  const [nodeStatuses, setNodeStatuses] = useState<Record<string, NodeStatus>>({});
   const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
-
-  const handleStatusChange = useCallback((nodeId: string, status: NodeStatus) => {
-    setNodeStatuses(prev => ({...prev, [nodeId]: status}));
-  }, []);
 
   const nodesPerPage = 10;
   
@@ -463,7 +406,7 @@ export default function NodesPage() {
         const searchLower = searchTerm.toLowerCase();
         const nameMatch = node.name.toLowerCase().includes(searchLower);
         const ipMatch = node.ip.toLowerCase().includes(searchLower);
-        const statusMatch = statusFilter === 'All' || (nodeStatuses[node.id] || node.status) === statusFilter;
+        const statusMatch = statusFilter === 'All' || node.status === statusFilter;
         const locationMatch = locationFilter === 'All' || node.location.city === locationFilter;
         return (nameMatch || ipMatch) && statusMatch && locationMatch;
       })
@@ -478,7 +421,7 @@ export default function NodesPage() {
         
         return direction === 'desc' ? comparison * -1 : comparison;
       });
-  }, [allNodes, searchTerm, statusFilter, locationFilter, sortOption, nodeStatuses]);
+  }, [allNodes, searchTerm, statusFilter, locationFilter, sortOption]);
 
   const totalPages = Math.ceil(filteredAndSortedNodes.length / nodesPerPage);
   const paginatedNodes = filteredAndSortedNodes.slice(
@@ -487,9 +430,9 @@ export default function NodesPage() {
   );
 
   const filterPills = useMemo(() => {
-    const onlineCount = Object.values(nodeStatuses).filter(s => s === 'Online').length;
-    const offlineCount = Object.values(nodeStatuses).filter(s => s === 'Offline').length;
-    const maintCount = Object.values(nodeStatuses).filter(s => s === 'Maint.').length;
+    const onlineCount = allNodes.filter(n => n.status === 'Online').length;
+    const offlineCount = allNodes.filter(n => n.status === 'Offline').length;
+    const maintCount = allNodes.filter(n => n.status === 'Maint.').length;
     
     return [
       { label: 'All', status: 'All' },
@@ -497,7 +440,8 @@ export default function NodesPage() {
       { label: 'Offline', count: offlineCount, status: 'Offline' },
       { label: 'Maintenance', count: maintCount, status: 'Maint.' },
     ];
-  }, [nodeStatuses]);
+  }, [allNodes]);
+
 
   const locations = useMemo(() => ['All', ...new Set(allNodes.map(node => node.location.city))], [allNodes]);
     
@@ -647,7 +591,7 @@ export default function NodesPage() {
                 </TableRow>
             )}
             { !loading && paginatedNodes.length > 0 && paginatedNodes.map((node) => (
-                <NodeDataRow key={node.id} node={node} onStatusChange={handleStatusChange} />
+                <NodeDataRow key={node.id} node={node} />
             ))}
              { !loading && paginatedNodes.length === 0 && (
                 <TableRow>
