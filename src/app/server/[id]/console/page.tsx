@@ -1,5 +1,4 @@
 
-
 'use client';
 import {
   Breadcrumb,
@@ -26,7 +25,7 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import '../../globals.css'
+import '../globals.css'
 import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
@@ -159,6 +158,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
             if (newStatus !== currentStatus) {
                 setCurrentStatus(newStatus);
+                setLogs(prev => [...prev, { type: 'system', content: `Container status changed to ${newStatus}` }]);
             }
           }
         } catch(e) {
@@ -177,4 +177,99 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
       wsRef.current.onerror = (err) => {
         console.error('WS error:', err);
-        setLogs(prev => [...prev, { type
+        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
+        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [nodeIp, container?.containerId, currentStatus]);
+
+  const handleSendCommand = (command: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'container_exec', command: command + '\n' }));
+      setLogs(prev => [...prev, { type: 'input', content: command }]);
+    } else {
+      setLogs(prev => [...prev, { type: 'system', content: 'Cannot send command. WebSocket not connected.', error: true }]);
+    }
+  };
+
+  const handleControlClick = (action: 'start' | 'stop' | 'restart') => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'container_action', action }));
+        if (action === 'start' || action === 'restart') {
+            setCurrentStatus('Starting');
+        }
+    } else {
+        setLogs(prev => [...prev, { type: 'system', content: 'Cannot send control action. WebSocket not connected.', error: true }]);
+    }
+  };
+
+  const statusConfig = statusStyles[currentStatus];
+
+  if(containerLoading) {
+      return <div>Loading...</div>
+  }
+  
+  if(containerError) {
+      return <div>Error: {containerError.message}</div>
+  }
+
+  return (
+    <div className="flex flex-col h-full gap-8">
+      {/* Header */}
+      <div>
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link href="/my-servers">My Servers</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{container?.name || 'Console'}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4">
+          <div className="flex items-center gap-3">
+            <div className={cn('size-3 rounded-full', statusConfig.dot)}></div>
+            <h1 className={cn('text-2xl font-bold text-white', statusConfig.text)}>{currentStatus}</h1>
+            <div className="hidden sm:flex items-center gap-6 text-sm text-text-secondary pl-6 border-l border-border-dark ml-3">
+              <div className="flex items-center gap-2"><Cpu size={16}/> {cpuLoad.toFixed(0)}%</div>
+              <div className="flex items-center gap-2"><MemoryStick size={16}/> {ramUsage.current.toFixed(0)} / {ramUsage.max.toFixed(0)} MB</div>
+              <div className="flex items-center gap-2"><Clock size={16}/> Uptime: {uptime}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleControlClick('start')} disabled={currentStatus === 'Running'}><Play size={18} /> Start</Button>
+            <Button variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => handleControlClick('restart')} disabled={currentStatus !== 'Running'}><RefreshCw size={18} /> Restart</Button>
+            <Button variant="ghost" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleControlClick('stop')} disabled={currentStatus !== 'Running'}><StopCircle size={18} /> Stop</Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Terminal View */}
+      <div className='bg-card-dark border border-border-dark rounded-xl flex-grow flex flex-col'>
+         <div className='flex items-center p-3 border-b border-border-dark'>
+            <Terminal className='text-primary size-5 mr-3'/>
+            <p className='font-bold text-white'>Console</p>
+         </div>
+         <CustomTerminalView logs={logs} onCommand={handleSendCommand} />
+      </div>
+    </div>
+  );
+};
+
+export default ConsolePage;
+
+    
