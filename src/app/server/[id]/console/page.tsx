@@ -51,7 +51,8 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }) => {
+const ConsolePage = ({ params }: { params: { id: string } }) => {
+  const { id: containerId } = params;
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
   
@@ -80,22 +81,14 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
   const fitAddonRef = useRef(new FitAddon());
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (xtermRef.current) {
-        const term = xtermRef.current.terminal;
-        if (!term.hasLoaded) {
-            term.loadAddon(fitAddonRef.current);
-        }
-        fitAddonRef.current.fit();
-    }
-  }, [xtermRef]);
-
+  
   const handleResize = () => {
     fitAddonRef.current?.fit();
   };
 
   useEffect(() => {
+    // Fit the terminal when the component mounts and on window resize
+    setTimeout(() => handleResize(), 1); // Delay to ensure element is rendered
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -126,6 +119,13 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
 
     const term = xtermRef.current.terminal;
     
+    const onDataHandler = (data: string) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ command: data }));
+        }
+    };
+    const dataListener = term.onData(onDataHandler);
+    
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
@@ -134,12 +134,11 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
         term.write('\r\n\x1b[32m✓\x1b[0m WebSocket connection established.\r\n');
         
         // Start polling for health
+        const healthPayload = JSON.stringify({ type: 'container_health' });
+        wsRef.current?.send(healthPayload);
         healthIntervalRef.current = setInterval(() => {
-          wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
+          wsRef.current?.send(healthPayload);
         }, 5000); // Health every 5s
-
-        // Initial fetch
-        wsRef.current?.send(JSON.stringify({ type: 'container_health' }));
       };
 
       wsRef.current.onmessage = (event) => {
@@ -179,17 +178,12 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
     connect();
 
     return () => {
+        dataListener.dispose();
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         wsRef.current?.close();
     }
   }, [nodeIp, container?.containerId, container?.name, xtermRef]);
   
-  const onTerminalData = (data: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ command: data }));
-    }
-  };
-
   if (containerLoading || nodeLoading) {
     return <div className="text-center text-text-secondary">Loading console...</div>;
   }
@@ -297,7 +291,6 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
                 ref={xtermRef}
                 addons={[fitAddonRef.current]}
                 className="w-full h-full p-4"
-                onData={onTerminalData}
                 options={{
                     theme: {
                         background: '#111827', // bg-card-dark
@@ -318,5 +311,3 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
 };
 
 export default ConsolePage;
-
-    
