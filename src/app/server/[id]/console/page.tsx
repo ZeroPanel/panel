@@ -18,7 +18,7 @@ import {
   MemoryStick,
   Terminal,
 } from 'lucide-react';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useFirestore, useDoc } from '@/firebase';
@@ -51,11 +51,10 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params }: { params: { id: string } }) => {
+const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
   
-  const containerId = params.id;
   const containerRef = useMemo(() => 
     firestore && containerId ? doc(firestore, 'containers', containerId) : null, 
     [firestore, containerId]
@@ -78,14 +77,19 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [uptime, setUptime] = useState('0h 0m');
   
   const xtermRef = useRef<Xterm>(null);
-  const fitAddonRef = useRef<FitAddon>();
+  const fitAddonRef = useRef(new FitAddon());
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const onTerminalInit = (fitAddon: FitAddon, term: XtermTerminal, xterm: Xterm) => {
-    fitAddonRef.current = fitAddon;
-    handleResize();
-  };
+  useEffect(() => {
+    if (xtermRef.current) {
+        const term = xtermRef.current.terminal;
+        if (!term.hasLoaded) {
+            term.loadAddon(fitAddonRef.current);
+        }
+        fitAddonRef.current.fit();
+    }
+  }, [xtermRef]);
 
   const handleResize = () => {
     fitAddonRef.current?.fit();
@@ -121,11 +125,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     if (!nodeIp || !container?.containerId || !xtermRef.current) return;
 
     const term = xtermRef.current.terminal;
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    fitAddonRef.current = fitAddon;
-    fitAddon.fit();
-
+    
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
@@ -156,9 +156,10 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
           const m = Math.floor(uptimeSeconds % 3600 / 60);
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-        } else if (data.type === 'container_exec_output' || data.log) {
-            const output = data.data || data.log;
-            term.write(output);
+        } else if (data.type === 'container_exec_output') {
+            term.write(data.data);
+        } else if (data.log) {
+            term.write(data.log);
         }
       };
 
@@ -294,6 +295,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
         <CardContent className="flex-grow overflow-hidden p-0 rounded-b-lg">
             <Xterm
                 ref={xtermRef}
+                addons={[fitAddonRef.current]}
                 className="w-full h-full p-4"
                 onData={onTerminalData}
                 options={{
