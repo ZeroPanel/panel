@@ -91,7 +91,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   
   const handleResize = () => {
     try {
-        fitAddonRef.current?.fit();
+      setTimeout(() => fitAddonRef.current?.fit(), 1);
     } catch(e) {
         // This can sometimes fail if the terminal isn't fully initialized
         console.warn("Failed to fit terminal:", e);
@@ -99,7 +99,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   };
 
   useEffect(() => {
-    setTimeout(() => handleResize(), 1); 
+    handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -173,6 +173,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
           } else if (data.type === 'container_exec_output') {
               term.write(data.data);
           } else if (data.log) {
+              console.log(data.log);
               term.write(data.log.replace(/\n/g, '\r\n'));
           } else if (data.type === 'container_status') {
             const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
@@ -183,6 +184,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
         } catch(e) {
           // This can happen if the message is not JSON, e.g. initial connection logs
           if(typeof event.data === 'string') {
+              console.log(event.data);
               term.write(event.data.replace(/\n/g, '\r\n'));
           }
         }
@@ -207,12 +209,14 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
     return () => {
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        wsRef.current?.close();
+        if (wsRef.current) {
+          wsRef.current.close();
+        }
     }
-  }, [nodeIp, container?.containerId, xtermRef.current]);
+  }, [nodeIp, container?.containerId]);
   
   const handleSendCommand = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current) {
+    if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current?.terminal) {
         const term = xtermRef.current.terminal;
         const payload = {
             type: 'container_exec',
@@ -377,3 +381,5 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
+    
