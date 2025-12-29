@@ -25,7 +25,6 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import '../globals.css'
 import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
@@ -105,84 +104,75 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
   // WebSocket for health/stats and logs
   useEffect(() => {
-    if (!nodeIp || !container?.containerId) {
-        return;
-    };
-    
-    if (wsRef.current) {
+    if (!nodeIp || !container?.containerId || wsRef.current) {
         return;
     }
 
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     
-    const connect = () => {
-      wsRef.current = new WebSocket(wsUrl);
+    wsRef.current = new WebSocket(wsUrl);
 
-      wsRef.current.onopen = () => {
-        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
-        
-        const healthPayload = JSON.stringify({ type: 'container_info' });
-        wsRef.current?.send(healthPayload);
-        healthIntervalRef.current = setInterval(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current?.send(healthPayload);
-          }
-        }, 5000);
-      };
-
-      wsRef.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          if (data.type === 'container_health_response') {
-            setCpuLoad(Math.round(data.cpu.usage));
-            const ramCurrent = data.memory.usage / (1024 * 1024); // MB
-            const ramMax = data.memory.limit / (1024 * 1024); // MB
-            setRamUsage({ current: ramCurrent, max: ramMax });
-            
-            const uptimeSeconds = data.uptime;
-            const d = Math.floor(uptimeSeconds / (3600*24));
-            const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
-            const m = Math.floor(uptimeSeconds % 3600 / 60);
-            setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-
-            const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
-            if (newStatus !== currentStatus) {
-              setCurrentStatus(newStatus);
-            }
-          } else if (data.type === 'container_exec_output') {
-              setLogs(prev => [...prev, { type: 'output', content: data.data }]);
-          } else if (data.log) {
-              setLogs(prev => [...prev, { type: 'log', content: data.log }]);
-          } else if (data.type === 'container_status') {
-            const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
-            if (newStatus !== currentStatus) {
-                setCurrentStatus(newStatus);
-                setLogs(prev => [...prev, { type: 'system', content: `Container status changed to ${newStatus}` }]);
-            }
-          }
-        } catch(e) {
-          if(typeof event.data === 'string') {
-              setLogs(prev => [...prev, { type: 'log', content: event.data }]);
-          }
+    wsRef.current.onopen = () => {
+      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
+      
+      const healthPayload = JSON.stringify({ type: 'container_info' });
+      wsRef.current?.send(healthPayload);
+      healthIntervalRef.current = setInterval(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current?.send(healthPayload);
         }
-      };
-
-      wsRef.current.onclose = () => {
-        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected. Attempting to reconnect in 5 seconds...', error: true }]);
-        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        setCurrentStatus('Stopped');
-        setTimeout(connect, 5000);
-      };
-
-      wsRef.current.onerror = (err) => {
-        console.error('WS error:', err);
-        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
-        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-      };
+      }, 5000);
     };
 
-    connect();
+    wsRef.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'container_health_response') {
+          setCpuLoad(Math.round(data.cpu.usage));
+          const ramCurrent = data.memory.usage / (1024 * 1024); // MB
+          const ramMax = data.memory.limit / (1024 * 1024); // MB
+          setRamUsage({ current: ramCurrent, max: ramMax });
+          
+          const uptimeSeconds = data.uptime;
+          const d = Math.floor(uptimeSeconds / (3600*24));
+          const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
+          const m = Math.floor(uptimeSeconds % 3600 / 60);
+          setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
+
+          const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+          if (newStatus !== currentStatus) {
+            setCurrentStatus(newStatus);
+          }
+        } else if (data.type === 'container_exec_output') {
+            setLogs(prev => [...prev, { type: 'output', content: data.data }]);
+        } else if (data.log) {
+            setLogs(prev => [...prev, { type: 'log', content: data.log }]);
+        } else if (data.type === 'container_status') {
+          const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
+          if (newStatus !== currentStatus) {
+              setCurrentStatus(newStatus);
+              setLogs(prev => [...prev, { type: 'system', content: `Container status changed to ${newStatus}` }]);
+          }
+        }
+      } catch(e) {
+        if(typeof event.data === 'string') {
+            setLogs(prev => [...prev, { type: 'log', content: event.data }]);
+        }
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected.', error: true }]);
+      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+      setCurrentStatus('Stopped');
+    };
+
+    wsRef.current.onerror = (err) => {
+      console.error('WS error:', err);
+      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
+      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+    };
 
     return () => {
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
