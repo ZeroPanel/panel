@@ -51,8 +51,7 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params }: { params: { id: string } }) => {
-  const { id: containerId } = params;
+const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
   
