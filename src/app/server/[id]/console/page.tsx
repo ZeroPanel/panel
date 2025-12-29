@@ -25,7 +25,7 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import { XTerm } from 'xterm-react';
+import { Xterm } from 'xterm-react';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import type { Terminal as XtermTerminal } from 'xterm';
@@ -77,12 +77,12 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
   
-  const xtermRef = useRef<XTerm>(null);
+  const xtermRef = useRef<Xterm>(null);
   const fitAddonRef = useRef<FitAddon>();
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const onTerminalInit = (fitAddon: FitAddon, term: XtermTerminal) => {
+  const onTerminalInit = (fitAddon: FitAddon, term: XtermTerminal, xterm: Xterm) => {
     fitAddonRef.current = fitAddon;
     handleResize();
   };
@@ -121,6 +121,10 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     if (!nodeIp || !container?.containerId || !xtermRef.current) return;
 
     const term = xtermRef.current.terminal;
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    fitAddonRef.current = fitAddon;
+    fitAddon.fit();
 
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     const connect = () => {
@@ -288,10 +292,9 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-hidden p-0 rounded-b-lg">
-            <XTerm
+            <Xterm
                 ref={xtermRef}
                 className="w-full h-full p-4"
-                addons={[new FitAddon()]}
                 onData={onTerminalData}
                 options={{
                     theme: {
@@ -313,3 +316,5 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
+    
