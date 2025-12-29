@@ -128,7 +128,9 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
   // WebSocket for health/stats and logs
   useEffect(() => {
-    if (!nodeIp || !container?.containerId || !xtermRef.current?.terminal) return;
+    if (!nodeIp || !container?.containerId || !xtermRef.current?.terminal) {
+        return;
+    };
 
     const term = xtermRef.current.terminal;
     const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
@@ -200,7 +202,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         wsRef.current?.close();
     }
-  }, [nodeIp, container?.containerId, container?.name, xtermRef]);
+  }, [nodeIp, container?.containerId]);
   
   const handleSendCommand = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current) {
@@ -368,3 +370,5 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
+
+    
