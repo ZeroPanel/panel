@@ -26,7 +26,7 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import '../../../globals.css'
+import '../../globals.css'
 import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
@@ -109,8 +109,12 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
     if (!nodeIp || !container?.containerId) {
         return;
     };
+    
+    if (wsRef.current) {
+        return;
+    }
 
-    const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
+    const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
@@ -118,7 +122,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
       wsRef.current.onopen = () => {
         setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
         
-        const healthPayload = JSON.stringify({ type: 'container_health' });
+        const healthPayload = JSON.stringify({ type: 'container_info' });
         wsRef.current?.send(healthPayload);
         healthIntervalRef.current = setInterval(() => {
           if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -173,145 +177,4 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
       wsRef.current.onerror = (err) => {
         console.error('WS error:', err);
-        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
-        setCurrentStatus('Stopped');
-        wsRef.current?.close();
-      };
-    };
-
-    connect();
-
-    return () => {
-        if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        if (wsRef.current) {
-          wsRef.current.close();
-        }
-    }
-  }, [nodeIp, container?.containerId, currentStatus]);
-  
-  const handleSendCommand = (command: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN && command) {
-        const payload = {
-            type: 'container_exec',
-            command: command + '\n'
-        };
-        setLogs(prev => [...prev, { type: 'input', content: command }]);
-        wsRef.current.send(JSON.stringify(payload));
-    } else {
-        console.warn("WebSocket not open or command is empty.");
-        setLogs(prev => [...prev, { type: 'system', content: 'Cannot send command. WebSocket not connected.', error: true }]);
-    }
-  };
-
-  if (containerLoading || nodeLoading) {
-    return <div className="text-center text-text-secondary">Loading console...</div>;
-  }
-  
-  if (containerError || nodeError) {
-    return <div className="text-center text-rose-400">Error loading data: {containerError?.message || nodeError?.message}</div>;
-  }
-
-  if (!container) {
-    return <div className="text-center text-text-secondary">Container not found.</div>;
-  }
-
-  const statusConfig = statusStyles[currentStatus];
-
-
-  return (
-    <div className="flex flex-col gap-6 h-[calc(100vh-10rem)]">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/my-servers">Servers</Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{container.name}</BreadcrumbPage>
-              </BreadcrumbItem>
-               <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Console</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-          <div className="flex items-center gap-2 mt-2">
-            <h1 className="text-2xl font-bold text-white">{container.name}</h1>
-             <div className={cn("px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5", statusConfig.text)}>
-                <span className={cn("size-1.5 rounded-full", statusConfig.dot)}></span>
-                {currentStatus}
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-400">
-            <Play className="size-4 mr-2" />
-            Start
-          </Button>
-          <Button variant="outline" className="bg-amber-500/10 border-amber-500/20 text-amber-400 hover:bg-amber-500/20 hover:text-amber-400">
-            <RefreshCw className="size-4 mr-2" />
-            Restart
-          </Button>
-          <Button variant="outline" className="bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-400">
-            <StopCircle className="size-4 mr-2" />
-            Stop
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-card-dark border-border-dark">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">CPU Load</CardTitle>
-            <Cpu className="size-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{cpuLoad}%</div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card-dark border-border-dark">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">RAM Usage</CardTitle>
-            <MemoryStick className="size-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {ramUsage.current.toFixed(0)} MB <span className="text-sm text-text-secondary">/ {ramUsage.max.toFixed(0)} MB</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card-dark border-border-dark">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-text-secondary">Uptime</CardTitle>
-            <Clock className="size-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{uptime}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Server Console */}
-      <div className="flex flex-col flex-grow h-full bg-card-dark border-border-dark rounded-lg">
-        <CardHeader className="flex-row items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <Terminal className="size-5 text-primary" />
-            <CardTitle>Server Console</CardTitle>
-          </div>
-        </CardHeader>
-        <CustomTerminalView 
-          logs={logs}
-          onCommand={handleSendCommand}
-        />
-      </div>
-    </div>
-  );
-};
-
-export default ConsolePage;
+        setLogs(prev => [...prev, { type

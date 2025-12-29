@@ -55,14 +55,13 @@ export function ContainerCard({ container }: { container: Container }) {
 
     useEffect(() => {
         if (!nodeIp || !container.containerId) return;
-
-        const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
-        
+    
         // Prevent re-creating the connection if it's already open or connecting
         if (healthWsRef.current && healthWsRef.current.readyState < 2) {
             return;
         }
 
+        const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
         const ws = new WebSocket(wsUrl);
         healthWsRef.current = ws;
 
@@ -74,8 +73,8 @@ export function ContainerCard({ container }: { container: Container }) {
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type === 'container_status' && data.status) {
-                     const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
+                if (data.type === 'container_health_response' || data.type === 'container_status') {
+                     const newStatus = (data.status === 'running' || data.status === 'online') ? 'Running' : 'Stopped';
                      setCurrentStatus(newStatus);
                 }
             } catch (e) {
@@ -85,31 +84,34 @@ export function ContainerCard({ container }: { container: Container }) {
 
         ws.onclose = () => {
             console.log(`Status WS disconnected for ${container.name}`);
-            healthWsRef.current = null; // Clear the ref on close
+            setCurrentStatus('Stopped');
+            healthWsRef.current = null;
         };
 
         ws.onerror = (err) => {
             console.error('Status WS error:', err);
+            setCurrentStatus('Stopped');
+            ws.close();
         };
         
         return () => {
             if (healthWsRef.current) {
                 healthWsRef.current.close();
+                healthWsRef.current = null;
             }
         };
 
     }, [nodeIp, container.containerId, container.name]);
 
-    const handleControlClick = (event: 'start' | 'stop' | 'restart') => {
-        if (healthWsRef.current && healthWsRef.current.readyState === WebSocket.OPEN) {
-            healthWsRef.current.send(JSON.stringify({ event }));
+    const handleControlClick = (action: 'start' | 'stop' | 'restart') => {
+        if (healthWsRef.current?.readyState === WebSocket.OPEN) {
+            healthWsRef.current.send(JSON.stringify({ type: 'container_action', action }));
             // Optimistically update status for better UX
-            if (event === 'start' || event === 'restart') {
+            if (action === 'start' || action === 'restart') {
                 setCurrentStatus('Starting');
             }
         } else {
             console.warn('WebSocket is not connected. Cannot send command.');
-            // Optional: You could add a toast notification here to inform the user.
         }
     };
 
@@ -179,12 +181,4 @@ export function ContainerCard({ container }: { container: Container }) {
                     </Button>
                      <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={currentStatus === 'Stopped'}>
                         <Link href={`/server/${container.id}/console`}>
-                        <Terminal size={16} />
-                        Console
-                        </Link>
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-}
+                        
