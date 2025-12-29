@@ -48,10 +48,10 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
+const ConsolePage = ({ params }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
-  const containerId = id;
+  const containerId = params.id;
   
   const containerRef = useMemo(() => 
     firestore && containerId ? doc(firestore, 'containers', containerId) : null, 
@@ -166,6 +166,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected.', error: true }]);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       setCurrentStatus('Stopped');
+      wsRef.current = null;
     };
 
     wsRef.current.onerror = (err) => {
@@ -261,5 +262,3 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
-
-    
