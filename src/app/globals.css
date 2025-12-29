@@ -96,6 +96,13 @@
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
   }
+  .xterm {
+    @apply p-4;
+  }
+
+  .xterm-viewport {
+    @apply !bg-card-dark;
+  }
 }
 
 @layer components {

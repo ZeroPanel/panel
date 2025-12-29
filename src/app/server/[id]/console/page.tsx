@@ -16,23 +16,19 @@ import {
   Cpu,
   Clock,
   MemoryStick,
-  Send,
   Terminal,
 } from 'lucide-react';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-
-type LogEntry = {
-  time: string;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS' | 'SERVER' | 'INPUT';
-  message: string;
-};
+import { XTerm } from 'xterm-react';
+import { FitAddon } from 'xterm-addon-fit';
+import 'xterm/css/xterm.css';
+import type { Terminal as XtermTerminal } from 'xterm';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
 
@@ -45,15 +41,6 @@ type Container = {
   status: ContainerStatus;
 };
 
-const levelStyles = {
-  INFO: 'text-blue-400',
-  WARN: 'text-yellow-400',
-  ERROR: 'text-red-400',
-  SUCCESS: 'text-green-400',
-  SERVER: 'text-purple-400',
-  INPUT: 'text-gray-400',
-};
-
 const statusStyles: Record<ContainerStatus, {
     dot: string;
     text: string;
@@ -63,7 +50,6 @@ const statusStyles: Record<ContainerStatus, {
     Starting: { dot: "bg-amber-500", text: "text-amber-400" },
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
-
 
 const ConsolePage = ({ params }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
@@ -87,15 +73,28 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [nodeSnapshot, nodeLoading, nodeError] = useDoc(nodeRef);
   const [nodeIp, setNodeIp] = useState<string | null>(null);
 
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [command, setCommand] = useState('');
-  const [filter, setFilter] = useState('All');
   const [cpuLoad, setCpuLoad] = useState(0);
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
   
+  const xtermRef = useRef<XTerm>(null);
+  const fitAddonRef = useRef<FitAddon>();
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const onTerminalInit = (fitAddon: FitAddon, term: XtermTerminal) => {
+    fitAddonRef.current = fitAddon;
+    handleResize();
+  };
+
+  const handleResize = () => {
+    fitAddonRef.current?.fit();
+  };
+
+  useEffect(() => {
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (containerSnapshot?.exists()) {
@@ -119,15 +118,16 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
   // WebSocket for health/stats and logs
   useEffect(() => {
-    if (!nodeIp || !container?.containerId) return;
+    if (!nodeIp || !container?.containerId || !xtermRef.current) return;
+
+    const term = xtermRef.current.terminal;
 
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
-        console.log(`WS connected to ${wsUrl}`);
-        setLogs([{ time: new Date().toLocaleTimeString('en-GB'), level: 'SUCCESS', message: `Connected to container ${container.name}` }]);
+        term.write('\r\n\x1b[32m✓\x1b[0m WebSocket connection established.\r\n');
         
         // Start polling for health
         healthIntervalRef.current = setInterval(() => {
@@ -152,32 +152,21 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
           const m = Math.floor(uptimeSeconds % 3600 / 60);
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-        } else if (data.type === 'container_exec_output') {
-            const newLog: LogEntry = {
-                time: new Date().toLocaleTimeString('en-GB'),
-                level: 'INFO',
-                message: data.data,
-            };
-            setLogs(prev => [...prev, newLog]);
-        } else if (data.log) { // Handle unsolicited log messages
-            const newLog: LogEntry = {
-                time: new Date().toLocaleTimeString('en-GB'),
-                level: 'INFO',
-                message: data.log,
-            };
-            setLogs(prev => [...prev, newLog]);
+        } else if (data.type === 'container_exec_output' || data.log) {
+            const output = data.data || data.log;
+            term.write(output);
         }
       };
 
       wsRef.current.onclose = () => {
-        console.log('WS disconnected');
+        term.write('\r\n\x1b[31m✗\x1b[0m WebSocket disconnected. Attempting to reconnect in 5 seconds...\r\n');
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-        setLogs(prev => [...prev, { time: new Date().toLocaleTimeString('en-GB'), level: 'ERROR', message: 'Disconnected from container.' }]);
         setTimeout(connect, 5000);
       };
 
       wsRef.current.onerror = (err) => {
         console.error('WS error:', err);
+        term.write('\r\n\x1b[31m✗\x1b[0m WebSocket connection error.\r\n');
         wsRef.current?.close();
       };
     };
@@ -188,30 +177,13 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         wsRef.current?.close();
     }
-  }, [nodeIp, container?.containerId, container?.name]);
-
-
-  const handleSendCommand = () => {
-    if (command.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ command: command + '\n' }));
-      setLogs([...logs, {
-        time: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-        level: 'INPUT',
-        message: command,
-      }]);
-      setCommand('');
+  }, [nodeIp, container?.containerId, container?.name, xtermRef]);
+  
+  const onTerminalData = (data: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ command: data }));
     }
   };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSendCommand();
-    }
-  };
-
-  const filteredLogs = logs.filter(
-    (log) => filter === 'All' || log.level === filter.toUpperCase()
-  );
 
   if (containerLoading || nodeLoading) {
     return <div className="text-center text-text-secondary">Loading console...</div>;
@@ -308,57 +280,36 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       </div>
 
       {/* Server Console */}
-      <Card className="bg-card-dark border-border-dark flex flex-col flex-grow">
+      <Card className="bg-card-dark border-border-dark flex flex-col flex-grow h-full">
         <CardHeader className="flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Terminal className="size-5 text-primary" />
             <CardTitle>Server Console</CardTitle>
           </div>
-          <div className="flex items-center gap-1 rounded-md bg-background-dark p-1">
-            {['All', 'Info', 'Warn', 'Error'].map((level) => (
-              <Button
-                key={level}
-                variant={filter === level ? 'default' : 'ghost'}
-                size="sm"
-                className="px-3 text-xs"
-                onClick={() => setFilter(level)}
-              >
-                {level}
-              </Button>
-            ))}
-          </div>
         </CardHeader>
-        <CardContent className="flex-grow overflow-auto p-4 bg-background-dark/50 rounded-b-lg">
-          <pre className="font-code text-sm whitespace-pre-wrap">
-            {filteredLogs.map((log, index) => (
-              <div key={index} className="flex gap-4">
-                <span className="text-text-secondary">[{log.time}]</span>
-                <span className={cn('font-bold', levelStyles[log.level])}>
-                  {log.level === 'INPUT' ? '>' : `[${log.level}]`}
-                </span>
-                <span className="flex-1 whitespace-pre-wrap">{log.message}</span>
-              </div>
-            ))}
-          </pre>
+        <CardContent className="flex-grow overflow-hidden p-0 rounded-b-lg">
+            <XTerm
+                ref={xtermRef}
+                className="w-full h-full p-4"
+                addons={[new FitAddon()]}
+                onData={onTerminalData}
+                options={{
+                    theme: {
+                        background: '#111827', // bg-card-dark
+                        foreground: '#d1d5db', // text-gray-300
+                        cursor: '#60a5fa', // blue-400
+                        selection: '#3b82f6', // blue-500
+                    },
+                    fontFamily: 'Source Code Pro, monospace',
+                    fontSize: 14,
+                    cursorBlink: true,
+                    convertEol: true,
+                }}
+            />
         </CardContent>
-        <div className="flex items-center gap-2 p-4 border-t border-border-dark bg-card-dark rounded-b-lg shrink-0">
-          <span className="text-green-400 font-code">root@server:~#</span>
-          <Input
-            placeholder="Type a command..."
-            className="flex-grow bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 font-code"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            onKeyPress={handleKeyPress}
-          />
-          <Button size="icon" className="bg-primary hover:bg-primary/90" onClick={handleSendCommand}>
-            <Send className="size-4" />
-          </Button>
-        </div>
       </Card>
     </div>
   );
 };
 
 export default ConsolePage;
-
-    
