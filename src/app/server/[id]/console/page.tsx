@@ -17,9 +17,9 @@ import {
   Clock,
   MemoryStick,
   Terminal,
+  Unplug,
 } from 'lucide-react';
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
@@ -28,6 +28,8 @@ import { cn } from '@/lib/utils';
 import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
+type ConnectionStatus = 'Connecting' | 'Connected' | 'Disconnected' | 'Error';
+
 
 type Container = {
   id: string;
@@ -69,13 +71,15 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     }
     return null;
   }, [firestore, container?.node]);
-  const [nodeSnapshot, nodeLoading, nodeError] = useDoc(nodeRef);
+
+  const [nodeSnapshot] = useDoc(nodeRef);
   const [nodeIp, setNodeIp] = useState<string | null>(null);
 
   const [cpuLoad, setCpuLoad] = useState(0);
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
-  const [logs, setLogs] = useState<Log[]>([{type: 'system', content: 'Attempting to connect to container...'}]);
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [connectionState, setConnectionState] = useState<ConnectionStatus>('Connecting');
   
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -102,21 +106,25 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     }
   }, [nodeSnapshot]);
 
-  // WebSocket for health/stats and logs
-  useEffect(() => {
-    if (!nodeIp || !container?.containerId || wsRef.current) {
+  const connect = useCallback(() => {
+    if (!nodeIp || !container?.containerId || (wsRef.current && wsRef.current.readyState < 2)) {
         return;
     }
-
+    
+    setLogs([{ type: 'system', content: 'Attempting to connect to container...' }]);
+    setConnectionState('Connecting');
+    
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
     
     wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onopen = () => {
+      setConnectionState('Connected');
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
       
       const healthPayload = JSON.stringify({ type: 'container_info' });
       wsRef.current?.send(healthPayload);
+      if(healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       healthIntervalRef.current = setInterval(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           wsRef.current?.send(healthPayload);
@@ -163,18 +171,24 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     };
 
     wsRef.current.onclose = () => {
+      setConnectionState('Disconnected');
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected.', error: true }]);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-      setCurrentStatus('Stopped');
       wsRef.current = null;
     };
 
     wsRef.current.onerror = (err) => {
+      setConnectionState('Error');
       console.error('WS error:', err);
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+      wsRef.current = null;
     };
 
+  }, [nodeIp, container?.containerId, currentStatus]);
+
+  useEffect(() => {
+    connect();
     return () => {
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       if (wsRef.current) {
@@ -182,7 +196,8 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
         wsRef.current = null;
       }
     };
-  }, [nodeIp, container?.containerId, currentStatus]);
+  }, [connect]);
+
 
   const handleSendCommand = (command: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -242,6 +257,12 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {(connectionState === 'Disconnected' || connectionState === 'Error') && (
+              <Button variant="outline" onClick={connect}>
+                <Unplug className="mr-2" size={18} />
+                Reconnect
+              </Button>
+            )}
             <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleControlClick('start')} disabled={currentStatus === 'Running'}><Play size={18} /> Start</Button>
             <Button variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => handleControlClick('restart')} disabled={currentStatus !== 'Running'}><RefreshCw size={18} /> Restart</Button>
             <Button variant="ghost" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleControlClick('stop')} disabled={currentStatus !== 'Running'}><StopCircle size={18} /> Stop</Button>
