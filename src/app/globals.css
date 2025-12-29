@@ -97,11 +97,17 @@
     font-family: 'Inter', sans-serif;
   }
   .xterm {
-    @apply p-4;
+    @apply p-4 rounded-b-lg;
+    overflow: hidden;
   }
 
   .xterm-viewport {
     @apply !bg-card-dark;
+     scrollbar-width: none; /* Firefox */
+  }
+  
+  .xterm-viewport::-webkit-scrollbar {
+      display: none; /* Safari and Chrome */
   }
 }
 

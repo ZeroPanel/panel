@@ -9,6 +9,7 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Play,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   Clock,
   MemoryStick,
   Terminal,
+  Send,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -75,6 +77,7 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
   const [cpuLoad, setCpuLoad] = useState(0);
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
+  const [command, setCommand] = useState('');
   
   const xtermRef = useRef<Xterm>(null);
   const fitAddonRef = useRef(new FitAddon());
@@ -82,12 +85,16 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const handleResize = () => {
-    fitAddonRef.current?.fit();
+    try {
+        fitAddonRef.current?.fit();
+    } catch(e) {
+        // This can sometimes fail if the terminal isn't fully initialized
+        console.warn("Failed to fit terminal:", e);
+    }
   };
 
   useEffect(() => {
-    // Fit the terminal when the component mounts and on window resize
-    setTimeout(() => handleResize(), 1); // Delay to ensure element is rendered
+    setTimeout(() => handleResize(), 1); 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -117,47 +124,45 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
     if (!nodeIp || !container?.containerId || !xtermRef.current) return;
 
     const term = xtermRef.current.terminal;
-    
-    const onDataHandler = (data: string) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ command: data }));
-        }
-    };
-    const dataListener = term.onData(onDataHandler);
-    
     const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+    
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
         term.write('\r\n\x1b[32m✓\x1b[0m WebSocket connection established.\r\n');
         
-        // Start polling for health
         const healthPayload = JSON.stringify({ type: 'container_health' });
         wsRef.current?.send(healthPayload);
         healthIntervalRef.current = setInterval(() => {
-          wsRef.current?.send(healthPayload);
-        }, 5000); // Health every 5s
+          if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current?.send(healthPayload);
+          }
+        }, 5000);
       };
 
       wsRef.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        try {
+          const data = JSON.parse(event.data);
 
-        if (data.type === 'container_health_response') {
-          setCpuLoad(Math.round(data.cpu.usage));
-          const ramCurrent = data.memory.usage / (1024 * 1024); // MB
-          const ramMax = data.memory.limit / (1024 * 1024); // MB
-          setRamUsage({ current: ramCurrent, max: ramMax });
-          
-          const uptimeSeconds = data.uptime;
-          const d = Math.floor(uptimeSeconds / (3600*24));
-          const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
-          const m = Math.floor(uptimeSeconds % 3600 / 60);
-          setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-        } else if (data.type === 'container_exec_output') {
-            term.write(data.data);
-        } else if (data.log) {
-            term.write(data.log);
+          if (data.type === 'container_health_response') {
+            setCpuLoad(Math.round(data.cpu.usage));
+            const ramCurrent = data.memory.usage / (1024 * 1024); // MB
+            const ramMax = data.memory.limit / (1024 * 1024); // MB
+            setRamUsage({ current: ramCurrent, max: ramMax });
+            
+            const uptimeSeconds = data.uptime;
+            const d = Math.floor(uptimeSeconds / (3600*24));
+            const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
+            const m = Math.floor(uptimeSeconds % 3600 / 60);
+            setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
+          } else if (data.type === 'container_exec_output') {
+              term.write(data.data);
+          } else if (data.log) {
+              term.write(data.log.replace(/\n/g, '\r\n'));
+          }
+        } catch(e) {
+          console.error("Could not parse ws message", e);
         }
       };
 
@@ -177,12 +182,30 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
     connect();
 
     return () => {
-        dataListener.dispose();
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         wsRef.current?.close();
     }
   }, [nodeIp, container?.containerId, container?.name, xtermRef]);
   
+  const handleSendCommand = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current) {
+        const term = xtermRef.current.terminal;
+        // Optionally write the command to the terminal for local echo
+        term.write(`\r\n$ ${command}\r\n`);
+        // Send command to server
+        wsRef.current.send(JSON.stringify({ command: command + '\n' }));
+        setCommand('');
+    } else {
+        console.warn("WebSocket not open or command is empty.");
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSendCommand();
+    }
+  };
+
   if (containerLoading || nodeLoading) {
     return <div className="text-center text-text-secondary">Loading console...</div>;
   }
@@ -278,33 +301,48 @@ const ConsolePage = ({ params: { id: containerId } }: { params: { id: string } }
       </div>
 
       {/* Server Console */}
-      <Card className="bg-card-dark border-border-dark flex flex-col flex-grow h-full">
+      <div className="flex flex-col flex-grow h-full bg-card-dark border-border-dark rounded-lg">
         <CardHeader className="flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Terminal className="size-5 text-primary" />
             <CardTitle>Server Console</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="flex-grow overflow-hidden p-0 rounded-b-lg">
+        <div className="flex-grow overflow-hidden p-0 rounded-b-lg">
             <Xterm
                 ref={xtermRef}
                 addons={[fitAddonRef.current]}
-                className="w-full h-full p-4"
+                className="w-full h-full"
                 options={{
                     theme: {
                         background: '#111827', // bg-card-dark
                         foreground: '#d1d5db', // text-gray-300
                         cursor: '#60a5fa', // blue-400
-                        selection: '#3b82f6', // blue-500
+                        selectionBackground: '#3b82f6', // blue-500
                     },
                     fontFamily: 'Source Code Pro, monospace',
                     fontSize: 14,
                     cursorBlink: true,
                     convertEol: true,
+                    scrollback: 1000,
+                    drawBoldTextInBrightColors: true,
                 }}
             />
-        </CardContent>
-      </Card>
+        </div>
+         <div className="flex gap-2 p-4 border-t border-border-dark">
+            <Input
+                placeholder="Type a command and press Enter..."
+                className="font-code bg-background-dark border-border-dark focus:ring-primary"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleKeyPress}
+            />
+            <Button onClick={handleSendCommand}>
+                <Send className="size-4" />
+                <span className="sr-only">Send Command</span>
+            </Button>
+        </div>
+      </div>
     </div>
   );
 };
