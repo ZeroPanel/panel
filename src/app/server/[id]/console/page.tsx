@@ -196,10 +196,14 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   const handleSendCommand = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current) {
         const term = xtermRef.current.terminal;
+        const payload = {
+            type: 'container_exec',
+            command: command + '\n'
+        };
         // Optionally write the command to the terminal for local echo
         term.write(`\r\n$ ${command}\r\n`);
         // Send command to server
-        wsRef.current.send(JSON.stringify({ command: command + '\n' }));
+        wsRef.current.send(JSON.stringify(payload));
         setCommand('');
     } else {
         console.warn("WebSocket not open or command is empty.");
@@ -355,5 +359,3 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 };
 
 export default ConsolePage;
-
-    
