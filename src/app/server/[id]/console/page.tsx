@@ -10,7 +10,6 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Play,
   RefreshCw,
@@ -19,7 +18,6 @@ import {
   Clock,
   MemoryStick,
   Terminal,
-  Send,
 } from 'lucide-react';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,11 +26,10 @@ import { useFirestore, useDoc } from '@/firebase';
 import { doc, DocumentData } from 'firebase/firestore';
 import { useAppState } from '@/components/app-state-provider';
 import { cn } from '@/lib/utils';
-import { Xterm } from 'xterm-react';
-import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 import type { Terminal as XtermTerminal } from 'xterm';
 import '../../../globals.css'
+import { CustomTerminalView, type Log } from '@/components/console/custom-terminal-view';
 
 type ContainerStatus = 'Running' | 'Stopped' | 'Starting' | 'Building';
 
@@ -82,28 +79,11 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   const [cpuLoad, setCpuLoad] = useState(0);
   const [ramUsage, setRamUsage] = useState({ current: 0, max: 0 });
   const [uptime, setUptime] = useState('0h 0m');
-  const [command, setCommand] = useState('');
+  const [logs, setLogs] = useState<Log[]>([{type: 'system', content: 'Attempting to connect to container...'}]);
   
-  const xtermRef = useRef<Xterm>(null);
-  const fitAddonRef = useRef(new FitAddon());
   const wsRef = useRef<WebSocket | null>(null);
   const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  const handleResize = () => {
-    try {
-      setTimeout(() => fitAddonRef.current?.fit(), 1);
-    } catch(e) {
-        // This can sometimes fail if the terminal isn't fully initialized
-        console.warn("Failed to fit terminal:", e);
-    }
-  };
-
-  useEffect(() => {
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
   useEffect(() => {
     if (containerSnapshot?.exists()) {
       const data = containerSnapshot.data() as DocumentData;
@@ -128,18 +108,17 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
   // WebSocket for health/stats and logs
   useEffect(() => {
-    if (!nodeIp || !container?.containerId || !xtermRef.current?.terminal) {
+    if (!nodeIp || !container?.containerId) {
         return;
     };
 
-    const term = xtermRef.current.terminal;
     const wsUrl = `wss://${nodeIp}/container/${container.containerId}`;
     
     const connect = () => {
       wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
-        term.write('\r\n\x1b[32m✓\x1b[0m WebSocket connection established.\r\n');
+        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
         
         const healthPayload = JSON.stringify({ type: 'container_health' });
         wsRef.current?.send(healthPayload);
@@ -171,10 +150,9 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
               setCurrentStatus(newStatus);
             }
           } else if (data.type === 'container_exec_output') {
-              term.write(data.data);
+              setLogs(prev => [...prev, { type: 'output', content: data.data }]);
           } else if (data.log) {
-              console.log(data.log);
-              term.write(data.log.replace(/\n/g, '\r\n'));
+              setLogs(prev => [...prev, { type: 'log', content: data.log }]);
           } else if (data.type === 'container_status') {
             const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
             if (newStatus !== currentStatus) {
@@ -182,16 +160,14 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             }
           }
         } catch(e) {
-          // This can happen if the message is not JSON, e.g. initial connection logs
           if(typeof event.data === 'string') {
-              console.log(event.data);
-              term.write(event.data.replace(/\n/g, '\r\n'));
+              setLogs(prev => [...prev, { type: 'log', content: event.data }]);
           }
         }
       };
 
       wsRef.current.onclose = () => {
-        term.write('\r\n\x1b[31m✗\x1b[0m WebSocket disconnected. Attempting to reconnect in 5 seconds...\r\n');
+        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected. Attempting to reconnect in 5 seconds...', error: true }]);
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
         setCurrentStatus('Stopped');
         setTimeout(connect, 5000);
@@ -199,7 +175,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
 
       wsRef.current.onerror = (err) => {
         console.error('WS error:', err);
-        term.write('\r\n\x1b[31m✗\x1b[0m WebSocket connection error.\r\n');
+        setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
         setCurrentStatus('Stopped');
         wsRef.current?.close();
       };
@@ -213,28 +189,19 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
           wsRef.current.close();
         }
     }
-  }, [nodeIp, container?.containerId]);
+  }, [nodeIp, container?.containerId, currentStatus]);
   
-  const handleSendCommand = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN && command && xtermRef.current?.terminal) {
-        const term = xtermRef.current.terminal;
+  const handleSendCommand = (command: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && command) {
         const payload = {
             type: 'container_exec',
             command: command + '\n'
         };
-        // Optionally write the command to the terminal for local echo
-        term.write(`\r\n$ ${command}\r\n`);
-        // Send command to server
+        setLogs(prev => [...prev, { type: 'input', content: command }]);
         wsRef.current.send(JSON.stringify(payload));
-        setCommand('');
     } else {
         console.warn("WebSocket not open or command is empty.");
-    }
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSendCommand();
+        setLogs(prev => [...prev, { type: 'system', content: 'Cannot send command. WebSocket not connected.', error: true }]);
     }
   };
 
@@ -340,46 +307,13 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             <CardTitle>Server Console</CardTitle>
           </div>
         </CardHeader>
-        {/* Hide scrollbar using the style tag */}
-        <div className="flex-grow overflow-hidden p-0 rounded-b-lg" style={{ overflowY: 'hidden' }}>
-            <Xterm
-                ref={xtermRef}
-                addons={[fitAddonRef.current]}
-                className="w-full h-full no-scrollbar"
-                options={{
-                    theme: {
-                        background: '#111827', // bg-card-dark
-                        foreground: '#d1d5db', // text-gray-300
-                        cursor: '#60a5fa', // blue-400
-                        selectionBackground: '#3b82f6', // blue-500
-                    },
-                    fontFamily: 'Source Code Pro, monospace',
-                    fontSize: 14,
-                    cursorBlink: true,
-                    convertEol: true,
-                    scrollback: 1000,
-                    drawBoldTextInBrightColors: true,
-                }}
-            />
-        </div>
-         <div className="flex gap-2 p-4 border-t border-border-dark">
-            <Input
-                placeholder="Type a command and press Enter..."
-                className="font-code bg-background-dark border-border-dark focus:ring-primary"
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                onKeyDown={handleKeyPress}
-            />
-            <Button onClick={handleSendCommand}>
-                <Send className="size-4" />
-                <span className="sr-only">Send Command</span>
-            </Button>
-        </div>
+        <CustomTerminalView 
+          logs={logs}
+          onCommand={handleSendCommand}
+        />
       </div>
     </div>
   );
 };
 
 export default ConsolePage;
-
-    
