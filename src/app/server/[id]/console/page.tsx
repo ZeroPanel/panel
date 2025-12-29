@@ -67,6 +67,8 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   const [containerSnapshot, containerLoading, containerError] = useDoc(containerRef);
   
   const [container, setContainer] = useState<Container | null>(null);
+  const [currentStatus, setCurrentStatus] = useState<ContainerStatus>('Starting');
+
 
   const nodeRef = useMemo(() => {
     if (firestore && container?.node) {
@@ -105,14 +107,16 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
   useEffect(() => {
     if (containerSnapshot?.exists()) {
       const data = containerSnapshot.data() as DocumentData;
+      const initialStatus = data.status || 'Starting';
       setContainer({
         id: containerSnapshot.id,
         name: data.name,
         node: data.node,
         nodeName: data.nodeName,
         containerId: data.containerId,
-        status: data.status,
+        status: initialStatus,
       });
+      setCurrentStatus(initialStatus);
     }
   }, [containerSnapshot]);
 
@@ -159,6 +163,9 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
             const m = Math.floor(uptimeSeconds % 3600 / 60);
             setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
+
+            const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
+            setCurrentStatus(newStatus);
           } else if (data.type === 'container_exec_output') {
               term.write(data.data);
           } else if (data.log) {
@@ -175,12 +182,14 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
       wsRef.current.onclose = () => {
         term.write('\r\n\x1b[31m✗\x1b[0m WebSocket disconnected. Attempting to reconnect in 5 seconds...\r\n');
         if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
+        setCurrentStatus('Stopped');
         setTimeout(connect, 5000);
       };
 
       wsRef.current.onerror = (err) => {
         console.error('WS error:', err);
         term.write('\r\n\x1b[31m✗\x1b[0m WebSocket connection error.\r\n');
+        setCurrentStatus('Stopped');
         wsRef.current?.close();
       };
     };
@@ -228,7 +237,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
     return <div className="text-center text-text-secondary">Container not found.</div>;
   }
 
-  const statusConfig = statusStyles[container.status];
+  const statusConfig = statusStyles[currentStatus];
 
 
   return (
@@ -257,7 +266,7 @@ const ConsolePage = ({ params: { id } }: { params: { id: string } }) => {
             <h1 className="text-2xl font-bold text-white">{container.name}</h1>
              <div className={cn("px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold uppercase tracking-wide flex items-center gap-1.5", statusConfig.text)}>
                 <span className={cn("size-1.5 rounded-full", statusConfig.dot)}></span>
-                {container.status}
+                {currentStatus}
             </div>
           </div>
         </div>
