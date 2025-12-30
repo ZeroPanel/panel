@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Send, ChevronsRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import AnsiToHtml from 'ansi-to-html';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -20,26 +19,25 @@ interface CustomTerminalViewProps {
   onCommand: (command: string) => void;
 }
 
-const converter = new AnsiToHtml({
-    fg: '#FFF',
-    bg: 'transparent',
-    newline: false,
-    escapeXML: true,
-    stream: true,
-    colors: {
-        0: '#000', 1: '#A00', 2: '#0A0', 3: '#A50', 4: '#00A', 5: '#A0A', 6: '#0AA', 7: '#AAA',
-        8: '#555', 9: '#F55', 10: '#5F5', 11: '#FF5', 12: '#55F', 13: '#F5F', 14: '#5FF', 15: '#FFF'
-    }
-});
-
 export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps) {
   const [command, setCommand] = useState('');
   const viewportRef = useRef<HTMLDivElement>(null);
+  
+  const converter = useRef(new AnsiToHtml({
+      fg: '#FFF',
+      bg: 'transparent',
+      newline: false,
+      escapeXML: true,
+      stream: true,
+      colors: {
+        0: '#000', 1: '#A00', 2: '#0A0', 3: '#A50', 4: '#00A', 5: '#A0A', 6: '#0AA', 7: '#AAA',
+        8: '#555', 9: '#F55', 10: '#5F5', 11: '#FF5', 12: '#55F', 13: '#F5F', 14: '#5FF', 15: '#FFF'
+      }
+  }));
 
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) {
-      // Only auto-scroll if user is already near the bottom
       const isScrolledToBottom = viewport.scrollHeight - viewport.clientHeight <= viewport.scrollTop + 20;
       if (isScrolledToBottom) {
         viewport.scrollTop = viewport.scrollHeight;
@@ -62,35 +60,17 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
 
   const renderLogLines = () => {
     let combinedHtml = '';
-    let currentInput = null;
 
-    logs.forEach((log, index) => {
+    logs.forEach((log) => {
       if (log.type === 'input') {
-        // If there was a previous input, render it
-        if (currentInput) {
-            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
-        }
-        currentInput = log.content;
+        combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${log.content}</span></div>`;
       } else if (log.type === 'system') {
-        if (currentInput) {
-            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
-            currentInput = null;
-        }
         const style = log.error ? 'color: #f43f5e;' : 'color: #22d3ee;';
         combinedHtml += `<p style="${style}">[System] ${log.content}</p>`;
-      } else {
-        if (currentInput) {
-            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
-            currentInput = null;
-        }
+      } else { // 'log' or 'output'
         const isError = log.error || log.content.toLowerCase().includes('error');
         const colorClass = isError ? 'text-rose-400' : 'text-text-secondary';
-        combinedHtml += `<div class="${colorClass}">${converter.toHtml(log.content)}</div>`;
-      }
-
-      // Render the last input if it's the last log item
-      if (index === logs.length - 1 && currentInput) {
-        combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
+        combinedHtml += `<div class="${colorClass}">${converter.current.toHtml(log.content)}</div>`;
       }
     });
 
@@ -98,8 +78,8 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   };
 
   return (
-    <div className="flex flex-col h-full flex-grow p-4 pt-0">
-        <ScrollArea className="flex-grow bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
+    <div className="flex flex-col h-full p-4 pt-0">
+        <ScrollArea className="flex-1 bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
              <pre className="p-4 whitespace-pre-wrap">
                 {renderLogLines()}
             </pre>

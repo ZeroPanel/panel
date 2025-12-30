@@ -120,9 +120,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     wsRef.current.onopen = () => {
       setConnectionState('Connected');
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection established.' }]);
-      
-      const healthPayload = JSON.stringify({ type: 'container_info' });
-      wsRef.current?.send(healthPayload);
     };
 
     wsRef.current.onmessage = (event) => {

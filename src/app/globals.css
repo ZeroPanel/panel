@@ -103,26 +103,16 @@
 
   .xterm-viewport {
     @apply !bg-card-dark;
-     scrollbar-width: none !important; /* Firefox */
   }
 
   .terminal {
     @apply !bg-card-dark;
-     scrollbar-width: none !important; /* Firefox */
   }
-  .terminal::-webkit-scrollbar {
-    display: none !important; /* Safari and Chrome */
-}
-  .xterm-viewport::-webkit-scrollbar {
-      display: none; /* Safari and Chrome */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none !important;
   }
   .no-scrollbar{
-    @apply !bg-card-dark;
-    scrollbar-width: none !important; /* Firefox */
-  }
-
-  .no-scrollbar::-webkit-scrollbar {
-    display: none !important; /* Safari and Chrome */
+    scrollbar-width: none !important;
   }
 }
 
