@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
@@ -5,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Send, ChevronsRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import AnsiToHtml from 'ansi-to-html';
 
 export type Log = {
   type: 'log' | 'input' | 'output' | 'system';
@@ -17,12 +19,38 @@ interface CustomTerminalViewProps {
   onCommand: (command: string) => void;
 }
 
+const converter = new AnsiToHtml({
+    fg: '#FFF',
+    bg: 'transparent',
+    newline: false,
+    escapeXML: true,
+    stream: true,
+    colors: {
+        0: '#000',
+        1: '#A00',
+        2: '#0A0',
+        3: '#A50',
+        4: '#00A',
+        5: '#A0A',
+        6: '#0AA',
+        7: '#AAA',
+        8: '#555',
+        9: '#F55',
+        10: '#5F5',
+        11: '#FF5',
+        12: '#55F',
+        13: '#F5F',
+        14: '#5FF',
+        15: '#FFF'
+    }
+});
+
 export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps) {
   const [command, setCommand] = useState('');
   const endOfLogsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endOfLogsRef.current?.scrollIntoView({ behavior: 'smooth' });
+    endOfLogsRef.current?.scrollIntoView({ behavior: 'auto' });
   }, [logs]);
 
   const handleSendCommand = () => {
@@ -51,13 +79,12 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
       case 'system':
         return <p key={index} className={cn("text-cyan-400", log.error && "text-rose-400")}>[System] {log.content}</p>;
       case 'output':
-        return <pre key={index} className="text-text-secondary whitespace-pre-wrap">{log.content}</pre>;
       case 'log':
       default:
         return (
-          <p key={index} className={cn("text-text-secondary", isError && "text-rose-400")}>
-            {log.content}
-          </p>
+          <div key={index} className={cn("text-text-secondary", isError && "text-rose-400")}>
+            <span dangerouslySetInnerHTML={{ __html: converter.toHtml(log.content) }} />
+          </div>
         );
     }
   };
@@ -65,7 +92,9 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   return (
     <div className="flex flex-col h-full flex-grow p-4 pt-0">
         <div className="flex-grow bg-background-dark/50 p-4 rounded-t-lg overflow-y-auto font-code text-sm leading-relaxed no-scrollbar">
-            {logs.map(renderLogLine)}
+            <pre>
+                {logs.map(renderLogLine)}
+            </pre>
             <div ref={endOfLogsRef} />
         </div>
          <div className="flex items-center gap-2 p-2 border-t-2 border-background-dark/50 bg-background-dark/50 rounded-b-lg">
