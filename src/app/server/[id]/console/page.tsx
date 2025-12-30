@@ -142,19 +142,15 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
           setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
 
           const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
-          if (newStatus !== currentStatus) {
-            setCurrentStatus(newStatus);
-          }
+          setCurrentStatus(newStatus);
         } else if (data.type === 'container_exec_output') {
             setLogs(prev => [...prev, { type: 'output', content: data.data }]);
         } else if (data.log) {
             setLogs(prev => [...prev, { type: 'log', content: data.log }]);
         } else if (data.type === 'container_status') {
           const newStatus = data.status === 'online' ? 'Running' : 'Stopped';
-          if (newStatus !== currentStatus) {
-              setCurrentStatus(newStatus);
-              setLogs(prev => [...prev, { type: 'system', content: `Container status changed to ${newStatus}` }]);
-          }
+          setCurrentStatus(newStatus);
+          setLogs(prev => [...prev, { type: 'system', content: `Container status changed to ${newStatus}` }]);
         }
       } catch(e) {
         if(typeof event.data === 'string') {
@@ -182,22 +178,22 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       wsRef.current = null;
     };
 
-  }, [nodeIp, container?.containerId, currentStatus]);
+  }, [nodeIp, container?.containerId]);
 
   useEffect(() => {
-    // Ensure we only connect when we have the necessary info and are not already connected/connecting.
-    if (nodeIp && container?.containerId && (!wsRef.current || wsRef.current.readyState > 1)) {
-      connect();
+    if (nodeIp && container?.containerId) {
+      if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+        connect();
+      }
     }
     
-    // Cleanup on unmount
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [nodeIp, container, connect]);
+  }, [nodeIp, container?.containerId, connect]);
 
 
   const handleSendCommand = (command: string) => {
