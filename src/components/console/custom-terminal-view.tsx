@@ -60,34 +60,48 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
     }
   }
 
-  const renderLogLine = (log: Log, index: number) => {
-    const isError = log.error || log.content.toLowerCase().includes('error');
-    switch (log.type) {
-      case 'input':
-        return (
-          <div key={index} className="flex gap-2">
-            <span className="text-emerald-400">$</span>
-            <span className="flex-1">{log.content}</span>
-          </div>
-        );
-      case 'system':
-        return <p key={index} className={cn("text-cyan-400", log.error && "text-rose-400")}>[System] {log.content}</p>;
-      case 'output':
-      case 'log':
-      default:
-        return (
-          <div key={index} className={cn("text-text-secondary", isError && "text-rose-400")}>
-            <span dangerouslySetInnerHTML={{ __html: converter.toHtml(log.content) }} />
-          </div>
-        );
-    }
+  const renderLogLines = () => {
+    let combinedHtml = '';
+    let currentInput = null;
+
+    logs.forEach((log, index) => {
+      if (log.type === 'input') {
+        // If there was a previous input, render it
+        if (currentInput) {
+            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
+        }
+        currentInput = log.content;
+      } else if (log.type === 'system') {
+        if (currentInput) {
+            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
+            currentInput = null;
+        }
+        const style = log.error ? 'color: #f43f5e;' : 'color: #22d3ee;';
+        combinedHtml += `<p style="${style}">[System] ${log.content}</p>`;
+      } else {
+        if (currentInput) {
+            combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
+            currentInput = null;
+        }
+        const isError = log.error || log.content.toLowerCase().includes('error');
+        const colorClass = isError ? 'text-rose-400' : 'text-text-secondary';
+        combinedHtml += `<div class="${colorClass}">${converter.toHtml(log.content)}</div>`;
+      }
+
+      // Render the last input if it's the last log item
+      if (index === logs.length - 1 && currentInput) {
+        combinedHtml += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${currentInput}</span></div>`;
+      }
+    });
+
+    return <div dangerouslySetInnerHTML={{ __html: combinedHtml }} />;
   };
 
   return (
     <div className="flex flex-col h-full flex-grow p-4 pt-0">
         <ScrollArea className="flex-grow bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
-             <pre className="p-4">
-                {logs.map(renderLogLine)}
+             <pre className="p-4 whitespace-pre-wrap">
+                {renderLogLines()}
             </pre>
         </ScrollArea>
          <div className="flex items-center gap-2 p-2 border-t-2 border-background-dark/50 bg-background-dark/50 rounded-b-lg">
