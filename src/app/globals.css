@@ -124,12 +124,6 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none !important; /* Safari and Chrome */
   }
-
-  ::-webkit-scrollbar{
-    display: none;
-  }
-
-
 }
 
 @layer components {
