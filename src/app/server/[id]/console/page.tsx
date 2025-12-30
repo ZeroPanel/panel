@@ -182,17 +182,22 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       wsRef.current = null;
     };
 
-  }, [nodeIp, container?.containerId, currentStatus]);
+  }, [nodeIp, container?.containerId]);
 
   useEffect(() => {
-    connect();
+    // Ensure we only connect when we have the necessary info and are not already connected/connecting.
+    if (nodeIp && container?.containerId && (!wsRef.current || wsRef.current.readyState > 1)) {
+      connect();
+    }
+    
+    // Cleanup on unmount
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
     };
-  }, [connect]);
+  }, [nodeIp, container, connect]);
 
 
   const handleSendCommand = (command: string) => {
