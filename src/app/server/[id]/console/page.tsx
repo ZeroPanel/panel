@@ -211,7 +211,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
 
   const handleControlClick = (action: 'start' | 'stop' | 'restart') => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'container_action', action }));
+        wsRef.current.send(JSON.stringify({ event: action }));
         if (action === 'start' || action === 'restart') {
             setCurrentStatus('Starting');
         }

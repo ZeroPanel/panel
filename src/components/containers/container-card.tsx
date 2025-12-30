@@ -181,4 +181,12 @@ export function ContainerCard({ container }: { container: Container }) {
                     </Button>
                      <Button asChild variant="outline" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card-dark border border-border-dark hover:bg-primary hover:border-primary text-text-secondary hover:text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed" disabled={currentStatus === 'Stopped'}>
                         <Link href={`/server/${container.id}/console`}>
-                        
+                          <Terminal size={16} />
+                          Console
+                        </Link>
+                    </Button>
+                 </div>
+            </div>
+        </div>
+    );
+}
