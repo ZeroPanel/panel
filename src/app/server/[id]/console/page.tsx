@@ -126,20 +126,17 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       try {
         const data = JSON.parse(event.data);
 
-        if (data.type === 'container_health_response') {
-          setCpuLoad(Math.round(data.cpu.usage));
-          const ramCurrent = data.memory.usage / (1024 * 1024); // MB
-          const ramMax = data.memory.limit / (1024 * 1024); // MB
-          setRamUsage({ current: ramCurrent, max: ramMax });
-          
-          const uptimeSeconds = data.uptime;
-          const d = Math.floor(uptimeSeconds / (3600*24));
-          const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
-          const m = Math.floor(uptimeSeconds % 3600 / 60);
-          setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
-
-          const newStatus = data.status === 'running' ? 'Running' : 'Stopped';
-          setCurrentStatus(newStatus);
+        if (data.type === 'container_stats') {
+            setCpuLoad(Math.round(data.cpu.usage));
+            const ramCurrent = data.memory.usage / (1024 * 1024); // MB
+            const ramMax = data.memory.limit / (1024 * 1024); // MB
+            setRamUsage({ current: ramCurrent, max: ramMax });
+            
+            const uptimeSeconds = data.uptime;
+            const d = Math.floor(uptimeSeconds / (3600*24));
+            const h = Math.floor(uptimeSeconds % (3600*24) / 3600);
+            const m = Math.floor(uptimeSeconds % 3600 / 60);
+            setUptime(`${d > 0 ? `${d}d ` : ''}${h}h ${m}m`);
         } else if (data.type === 'container_exec_output') {
             setLogs(prev => [...prev, { type: 'output', content: data.data }]);
         } else if (data.log) {
