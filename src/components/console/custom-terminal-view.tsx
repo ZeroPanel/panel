@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Send, ChevronsRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AnsiToHtml from 'ansi-to-html';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export type Log = {
   type: 'log' | 'input' | 'output' | 'system';
@@ -26,31 +27,24 @@ const converter = new AnsiToHtml({
     escapeXML: true,
     stream: true,
     colors: {
-        0: '#000',
-        1: '#A00',
-        2: '#0A0',
-        3: '#A50',
-        4: '#00A',
-        5: '#A0A',
-        6: '#0AA',
-        7: '#AAA',
-        8: '#555',
-        9: '#F55',
-        10: '#5F5',
-        11: '#FF5',
-        12: '#55F',
-        13: '#F5F',
-        14: '#5FF',
-        15: '#FFF'
+        0: '#000', 1: '#A00', 2: '#0A0', 3: '#A50', 4: '#00A', 5: '#A0A', 6: '#0AA', 7: '#AAA',
+        8: '#555', 9: '#F55', 10: '#5F5', 11: '#FF5', 12: '#55F', 13: '#F5F', 14: '#5FF', 15: '#FFF'
     }
 });
 
 export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps) {
   const [command, setCommand] = useState('');
-  const endOfLogsRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endOfLogsRef.current?.scrollIntoView({ behavior: 'auto' });
+    const viewport = viewportRef.current;
+    if (viewport) {
+      // Only auto-scroll if user is already near the bottom
+      const isScrolledToBottom = viewport.scrollHeight - viewport.clientHeight <= viewport.scrollTop + 20;
+      if (isScrolledToBottom) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
+    }
   }, [logs]);
 
   const handleSendCommand = () => {
@@ -91,12 +85,11 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
 
   return (
     <div className="flex flex-col h-full flex-grow p-4 pt-0">
-        <div className="flex-grow bg-background-dark/50 p-4 rounded-t-lg overflow-y-auto font-code text-sm leading-relaxed no-scrollbar">
-            <pre>
+        <ScrollArea className="flex-grow bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
+             <pre className="p-4">
                 {logs.map(renderLogLine)}
             </pre>
-            <div ref={endOfLogsRef} />
-        </div>
+        </ScrollArea>
          <div className="flex items-center gap-2 p-2 border-t-2 border-background-dark/50 bg-background-dark/50 rounded-b-lg">
             <ChevronsRight className="text-primary size-5 shrink-0"/>
             <Input
