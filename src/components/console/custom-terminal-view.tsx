@@ -60,6 +60,18 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
 
   const renderLogLines = () => {
     let combinedHtml = '';
+    const localConverter = new AnsiToHtml({
+      fg: '#FFF',
+      bg: 'transparent',
+      newline: false,
+      escapeXML: true,
+      stream: true,
+      colors: {
+        0: '#000', 1: '#A00', 2: '#0A0', 3: '#A50', 4: '#00A', 5: '#A0A', 6: '#0AA', 7: '#AAA',
+        8: '#555', 9: '#F55', 10: '#5F5', 11: '#FF5', 12: '#55F', 13: '#F5F', 14: '#5FF', 15: '#FFF'
+      }
+    });
+
 
     logs.forEach((log) => {
       if (log.type === 'input') {
@@ -70,7 +82,7 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
       } else { // 'log' or 'output'
         const isError = log.error || log.content.toLowerCase().includes('error');
         const colorClass = isError ? 'text-rose-400' : 'text-text-secondary';
-        combinedHtml += `<div class="${colorClass}">${converter.current.toHtml(log.content)}</div>`;
+        combinedHtml += `<div class="${colorClass}">${localConverter.toHtml(log.content)}</div>`;
       }
     });
 
@@ -78,13 +90,13 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   };
 
   return (
-    <div className="flex flex-col h-full p-4 pt-0">
+    <div className="flex flex-col flex-1 min-h-0 p-4 pt-0">
         <ScrollArea className="flex-1 bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
              <pre className="p-4 whitespace-pre-wrap">
                 {renderLogLines()}
             </pre>
         </ScrollArea>
-         <div className="flex items-center gap-2 p-2 border-t-2 border-background-dark/50 bg-background-dark/50 rounded-b-lg">
+         <div className="flex items-center gap-2 p-2 border-t-2 border-background-dark/50 bg-background-dark/50 rounded-b-lg shrink-0">
             <ChevronsRight className="text-primary size-5 shrink-0"/>
             <Input
                 placeholder="Type a command and press Enter..."

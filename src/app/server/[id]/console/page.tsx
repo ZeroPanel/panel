@@ -271,8 +271,8 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       </div>
 
       {/* Terminal View */}
-      <div className='bg-card-dark border border-border-dark rounded-xl flex flex-col h-[600px]'>
-         <div className='flex items-center p-3 border-b border-border-dark'>
+      <div className='bg-card-dark border border-border-dark rounded-xl flex flex-col flex-1 min-h-0'>
+         <div className='flex items-center p-3 border-b border-border-dark shrink-0'>
             <Terminal className='text-primary size-5 mr-3'/>
             <p className='font-bold text-white'>Console</p>
          </div>
