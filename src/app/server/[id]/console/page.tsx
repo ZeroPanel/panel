@@ -170,9 +170,15 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       }
     };
 
-    wsRef.current.onclose = () => {
+    wsRef.current.onclose = (event) => {
       setConnectionState('Disconnected');
-      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket disconnected.', error: true }]);
+      let reason = `Code: ${event.code}.`;
+      if (event.code === 1005) {
+        reason += ' No status code was provided. This indicates an abnormal closure. Check server logs or network status.';
+      } else if (event.code === 1006) {
+        reason += ' The connection was closed abnormally (e.g., server process killed or network issue).';
+      }
+      setLogs(prev => [...prev, { type: 'system', content: `WebSocket disconnected. ${reason}`, error: true }]);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       wsRef.current = null;
     };
@@ -180,7 +186,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     wsRef.current.onerror = (err) => {
       setConnectionState('Error');
       console.error('WS error:', err);
-      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error.', error: true }]);
+      setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error. Check the browser console and network tab for details.', error: true }]);
       if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       wsRef.current = null;
     };
@@ -263,9 +269,15 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
                 Reconnect
               </Button>
             )}
-            <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleControlClick('start')} disabled={currentStatus === 'Running'}><Play size={18} /> Start</Button>
-            <Button variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => handleControlClick('restart')} disabled={currentStatus !== 'Running'}><RefreshCw size={18} /> Restart</Button>
-            <Button variant="ghost" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleControlClick('stop')} disabled={currentStatus !== 'Running'}><StopCircle size={18} /> Stop</Button>
+            <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleControlClick('start')} disabled={currentStatus === 'Running' || currentStatus === 'Starting'}>
+              <Play size={18} /> Start
+            </Button>
+            <Button variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => handleControlClick('restart')} disabled={currentStatus !== 'Running'}>
+              <RefreshCw size={18} /> Restart
+            </Button>
+            <Button variant="ghost" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleControlClick('stop')} disabled={currentStatus !== 'Running'}>
+              <StopCircle size={18} /> Stop
+            </Button>
           </div>
         </div>
       </div>
