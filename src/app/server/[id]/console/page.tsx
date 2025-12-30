@@ -182,7 +182,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       wsRef.current = null;
     };
 
-  }, [nodeIp, container?.containerId]);
+  }, [nodeIp, container?.containerId, currentStatus]);
 
   useEffect(() => {
     // Ensure we only connect when we have the necessary info and are not already connected/connecting.
@@ -278,7 +278,7 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       </div>
 
       {/* Terminal View */}
-      <div className='bg-card-dark border border-border-dark rounded-xl flex-grow flex flex-col'>
+      <div className='bg-card-dark border border-border-dark rounded-xl flex flex-col h-[600px]'>
          <div className='flex items-center p-3 border-b border-border-dark'>
             <Terminal className='text-primary size-5 mr-3'/>
             <p className='font-bold text-white'>Console</p>
