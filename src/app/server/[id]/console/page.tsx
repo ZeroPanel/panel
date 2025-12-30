@@ -82,7 +82,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   const [connectionState, setConnectionState] = useState<ConnectionStatus>('Connecting');
   
   const wsRef = useRef<WebSocket | null>(null);
-  const healthIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
     if (containerSnapshot?.exists()) {
@@ -124,12 +123,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       
       const healthPayload = JSON.stringify({ type: 'container_info' });
       wsRef.current?.send(healthPayload);
-      if(healthIntervalRef.current) clearInterval(healthIntervalRef.current);
-      healthIntervalRef.current = setInterval(() => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current?.send(healthPayload);
-        }
-      }, 5000);
     };
 
     wsRef.current.onmessage = (event) => {
@@ -179,7 +172,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
         reason += ' The connection was closed abnormally (e.g., server process killed or network issue).';
       }
       setLogs(prev => [...prev, { type: 'system', content: `WebSocket disconnected. ${reason}`, error: true }]);
-      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       wsRef.current = null;
     };
 
@@ -187,7 +179,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
       setConnectionState('Error');
       console.error('WS error:', err);
       setLogs(prev => [...prev, { type: 'system', content: 'WebSocket connection error. Check the browser console and network tab for details.', error: true }]);
-      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       wsRef.current = null;
     };
 
@@ -196,7 +187,6 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
   useEffect(() => {
     connect();
     return () => {
-      if (healthIntervalRef.current) clearInterval(healthIntervalRef.current);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
