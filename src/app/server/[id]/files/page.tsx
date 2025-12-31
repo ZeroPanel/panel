@@ -1,6 +1,9 @@
+
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useFirestore, useDoc } from '@/firebase';
+import { doc, DocumentData } from 'firebase/firestore';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -22,171 +25,208 @@ import {
 } from '@/components/ui/table';
 import {
   Archive,
-  ChevronRight,
-  Clock,
   CloudUpload,
-  Copy,
-  Database,
   File as FileIcon,
   FilePlus,
-  FileText,
   Folder as FolderIcon,
-  FolderOpen,
-  FolderPlus,
-  Grid,
-  HardDrive,
   Home,
   List,
+  Grid,
   MoreVertical,
   Move,
-  Network,
-  Pencil,
-  Power,
   Search,
-  Server,
-  Settings,
-  Share2,
   Trash2,
   X,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
 
-type FileItem = {
+type Container = {
   id: string;
   name: string;
-  type: 'folder' | 'file' | 'archive' | 'config' | 'log' | 'world';
-  size: string;
+  node: string;
+  containerId: string;
+};
+
+type FileItem = {
+  name: string;
   permissions: string;
-  modified: string;
-  icon: React.ReactNode;
+  owner: string;
+  group: string;
+  size: number;
+  isDirectory: boolean;
+  isSymlink: boolean;
+  month: string;
+  day: string;
+  time: string;
   selected?: boolean;
 };
 
-const initialFiles: FileItem[] = [
-  {
-    id: '1',
-    name: 'jei-1.18.2.jar',
-    type: 'archive',
-    size: '2.1 MB',
-    permissions: '-rw-r--r--',
-    modified: 'Just now',
-    icon: <Archive className="text-amber-400" size={24} />,
-  },
-  {
-    id: '2',
-    name: 'mod-config.json',
-    type: 'config',
-    size: '12 KB',
-    permissions: '-rw-rw-r--',
-    modified: '2 hours ago',
-    icon: <FileIcon className="text-purple-400" size={24} />,
-  },
-  {
-    id: '3',
-    name: 'readme.txt',
-    type: 'file',
-    size: '1 KB',
-    permissions: '-rw-r--r--',
-    modified: '1 day ago',
-    icon: <FileText className="text-blue-400" size={24} />,
-  },
-  {
-    id: '4',
-    name: 'optifine_HD_U_G8.jar',
-    type: 'archive',
-    size: '5.8 MB',
-    permissions: '-rwxr-xr-x',
-    modified: '3 days ago',
-    icon: <Archive className="text-emerald-400" size={24} />,
-  },
-  {
-    id: '5',
-    name: 'crash-report-2023-10-27.txt',
-    type: 'log',
-    size: '45 KB',
-    permissions: '-rw-r--r--',
-    modified: '1 week ago',
-    icon: <FileText className="text-rose-400" size={24} />,
-  },
-  {
-    id: '6',
-    name: 'old-config.bak',
-    type: 'file',
-    size: '12 KB',
-    permissions: '-rw-r--r--',
-    modified: '2 months ago',
-    icon: <FileIcon className="text-gray-500" size={24} />,
-    selected: true,
-  },
-];
+const getFileIcon = (file: FileItem) => {
+    if (file.isDirectory) {
+        return <FolderIcon className="text-primary fill-primary/20" size={24} />;
+    }
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    switch (extension) {
+        case 'jar':
+        case 'zip':
+        case 'tar':
+        case 'gz':
+            return <Archive className="text-amber-400" size={24} />;
+        case 'json':
+        case 'yml':
+        case 'properties':
+            return <FileIcon className="text-purple-400" size={24} />;
+        case 'log':
+        case 'txt':
+            return <FileIcon className="text-blue-400" size={24} />;
+        default:
+            return <FileIcon className="text-gray-400" size={24} />;
+    }
+};
 
-const directoryFolders = [
-    { name: 'mods', icon: <FolderIcon className="text-primary fill-primary/20" /> },
-    { name: 'config', icon: <FolderIcon className="text-amber-400 fill-amber-400/20" /> },
-    { name: 'logs', icon: <FolderIcon className="text-gray-500 fill-gray-500/20" /> },
-    { name: 'world', icon: <FolderIcon className="text-emerald-400 fill-emerald-400/20" /> },
-    { name: 'libraries', icon: <FolderIcon className="text-gray-500 fill-gray-500/20" /> },
-]
+const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
-export default function FileManagerPage({ params }: { params: { id: string }}) {
-  const [files, setFiles] = useState(initialFiles);
+export default function FileManagerPage({ params }: { params: { id: string } }) {
+  const firestore = useFirestore();
+  const containerDocId = params.id;
 
-  const selectedFiles = files.filter((file) => file.selected);
-  const isAllSelected = files.length > 0 && selectedFiles.length === files.length;
+  const [container, setContainer] = useState<Container | null>(null);
+  const [nodeIp, setNodeIp] = useState<string | null>(null);
+  
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [currentPath, setCurrentPath] = useState('/');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const containerRef = useMemo(() => 
+    firestore && containerDocId ? doc(firestore, 'containers', containerDocId) : null, 
+    [firestore, containerDocId]
+  );
+  const [containerSnapshot] = useDoc(containerRef);
+
+  const nodeRef = useMemo(() => {
+    if (firestore && container?.node) {
+      return doc(firestore, 'nodes', container.node);
+    }
+    return null;
+  }, [firestore, container?.node]);
+  const [nodeSnapshot] = useDoc(nodeRef);
+  
+  useEffect(() => {
+    if (containerSnapshot?.exists()) {
+      const data = containerSnapshot.data() as DocumentData;
+      setContainer({
+        id: containerSnapshot.id,
+        name: data.name,
+        node: data.node,
+        containerId: data.containerId,
+      });
+    }
+  }, [containerSnapshot]);
+
+  useEffect(() => {
+    if (nodeSnapshot?.exists()) {
+      setNodeIp(nodeSnapshot.data().ip);
+    }
+  }, [nodeSnapshot]);
+
+  const listFiles = useCallback((path: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      setIsLoading(true);
+      wsRef.current.send(JSON.stringify({
+        type: 'list_files',
+        path: path
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!nodeIp || !container?.containerId) return;
+
+    const wsUrl = `wss://${nodeIp}/containers/${container.containerId}`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+        console.log('File manager WebSocket connected');
+        listFiles(currentPath);
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'file_list') {
+            if (data.success) {
+                const sortedFiles = data.files.sort((a: FileItem, b: FileItem) => {
+                    if (a.isDirectory !== b.isDirectory) {
+                        return a.isDirectory ? -1 : 1;
+                    }
+                    return a.name.localeCompare(b.name);
+                });
+                setFiles(sortedFiles);
+                setCurrentPath(data.path);
+            } else {
+                console.error('Error listing files:', data.error);
+            }
+            setIsLoading(false);
+        }
+    };
+
+    ws.onclose = () => {
+        console.log('File manager WebSocket disconnected');
+        setIsLoading(false);
+    };
+
+    ws.onerror = (error) => {
+        console.error('File manager WebSocket error:', error);
+        setIsLoading(false);
+    };
+
+    return () => {
+        ws.close();
+    };
+  }, [nodeIp, container?.containerId, listFiles, currentPath]);
 
   const handleSelectAll = (checked: boolean) => {
     setFiles(files.map((file) => ({ ...file, selected: checked })));
   };
 
-  const handleSelect = (id: string, checked: boolean) => {
-    setFiles(files.map((file) => (file.id === id ? { ...file, selected: checked } : file)));
+  const handleSelect = (name: string, checked: boolean) => {
+    setFiles(files.map((file) => (file.name === name ? { ...file, selected: checked } : file)));
   };
+  
+  const handlePathChange = (path: string) => {
+    listFiles(path);
+  }
+
+  const handleFolderClick = (folderName: string) => {
+    const newPath = currentPath === '/' ? `/${folderName}` : `${currentPath}/${folderName}`;
+    handlePathChange(newPath);
+  };
+  
+  const handleBreadcrumbClick = (index: number) => {
+    const pathSegments = currentPath.split('/').filter(Boolean);
+    const newPath = '/' + pathSegments.slice(0, index + 1).join('/');
+    handlePathChange(newPath);
+  };
+
+  const selectedFiles = files.filter((file) => file.selected);
+  const isAllSelected = files.length > 0 && selectedFiles.length === files.length;
+  
+  const pathSegments = currentPath.split('/').filter(Boolean);
+
 
   return (
     <div className="flex h-full">
-      <aside className="w-64 bg-background-dark border-r border-border-dark flex-col hidden lg:flex">
-        <div className="p-4 border-b border-border-dark">
-          <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Directory Tree</h3>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <Input
-              className="w-full bg-card-dark border-none rounded-lg py-1.5 pl-9 pr-3 text-sm focus:ring-1 focus:ring-primary placeholder-gray-500"
-              placeholder="Filter folders..."
-              type="text"
-            />
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2">
-          <div className="flex flex-col gap-0.5">
-            <Button variant="ghost" className="flex items-center gap-2 px-3 py-2 justify-start text-sm w-full">
-              <FolderOpen size={20} className="text-gray-500" /> Root
-            </Button>
-            <div className="pl-4 border-l border-border-dark ml-3 mt-1 space-y-0.5">
-                {directoryFolders.map(folder => (
-                    <Button key={folder.name} variant={folder.name === 'mods' ? 'secondary' : 'ghost'} className={`w-full justify-start text-sm font-medium ${folder.name === 'mods' && 'text-primary'}`}>
-                        <div className='flex gap-2 items-center'>
-                           {folder.icon}
-                           {folder.name}
-                        </div>
-                    </Button>
-                ))}
-            </div>
-          </div>
-        </div>
-        <div className="p-4 border-t border-border-dark bg-card-dark/50">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs font-medium text-text-secondary">Disk Usage</span>
-            <span className="text-xs font-bold text-white">45%</span>
-          </div>
-          <div className="h-1.5 w-full bg-border-dark rounded-full overflow-hidden">
-            <div className="h-full bg-primary w-[45%]" />
-          </div>
-          <div className="flex justify-between mt-1">
-            <span className="text-[10px] text-gray-500">22.5 GB used</span>
-            <span className="text-[10px] text-gray-500">50 GB total</span>
-          </div>
-        </div>
-      </aside>
+      {/* This aside is part of a different story. Keeping it hidden for now. */}
+      {/* <aside className="w-64 bg-background-dark border-r border-border-dark flex-col hidden lg:flex">...</aside> */}
 
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <div className="flex flex-col border-b border-border-dark bg-background-dark z-10 shrink-0">
@@ -194,23 +234,23 @@ export default function FileManagerPage({ params }: { params: { id: string }}) {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link href="#" className="flex items-center gap-1"><Home size={16}/> Home</Link>
-                  </BreadcrumbLink>
+                  <BreadcrumbLink onClick={() => handlePathChange('/')} className="flex items-center gap-1 cursor-pointer"><Home size={16}/> Root</BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbLink asChild>
-                    <Link href="/my-servers">server-01</Link>
-                  </BreadcrumbLink>
-                </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="flex items-center gap-1">
-                    <FolderIcon className="text-primary fill-primary/20" size={16}/>
-                    mods
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
+                {pathSegments.map((segment, index) => (
+                    <React.Fragment key={index}>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                           {index === pathSegments.length - 1 ? (
+                             <BreadcrumbPage className="flex items-center gap-1">
+                               <FolderIcon className="text-primary fill-primary/20" size={16}/>
+                               {segment}
+                             </BreadcrumbPage>
+                           ) : (
+                            <BreadcrumbLink onClick={() => handleBreadcrumbClick(index)} className="cursor-pointer">{segment}</BreadcrumbLink>
+                           )}
+                        </BreadcrumbItem>
+                    </React.Fragment>
+                ))}
               </BreadcrumbList>
             </Breadcrumb>
           </div>
@@ -229,7 +269,7 @@ export default function FileManagerPage({ params }: { params: { id: string }}) {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <Input
                   className="w-full bg-card-dark border border-border-dark rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-1 focus:ring-primary placeholder-gray-500"
-                  placeholder="Search in /mods..."
+                  placeholder={`Search in ${currentPath}...`}
                 />
               </div>
               <div className="hidden sm:flex bg-card-dark p-1 rounded-lg border border-border-dark">
@@ -248,6 +288,7 @@ export default function FileManagerPage({ params }: { params: { id: string }}) {
                   <Checkbox 
                     checked={isAllSelected}
                     onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                    disabled={isLoading}
                   />
                 </TableHead>
                 <TableHead>Name</TableHead>
@@ -258,44 +299,55 @@ export default function FileManagerPage({ params }: { params: { id: string }}) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {files.map((file) => (
-                <TableRow key={file.id} data-state={file.selected ? 'selected' : ''}>
-                  <TableCell className="text-center">
-                    <Checkbox 
-                        checked={file.selected}
-                        onCheckedChange={(checked) => handleSelect(file.id, Boolean(checked))}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {file.icon}
-                      <div className="flex flex-col">
-                        <span className="font-medium text-white cursor-pointer hover:underline">{file.name}</span>
-                        <span className="sm:hidden text-xs text-text-secondary">{file.size} • {file.modified}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <td className="px-4 py-3 text-text-secondary hidden sm:table-cell">{file.size}</td>
-                  <td className="px-4 py-3 text-gray-500 font-mono text-xs hidden md:table-cell">{file.permissions}</td>
-                  <td className="px-4 py-3 text-text-secondary hidden lg:table-cell">{file.modified}</td>
-                  <td className="px-4 py-3 text-right">
-                    {file.selected ? (
-                       <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="text-gray-400 hover:text-red-500 hover:bg-red-500/10">
-                              <Trash2 size={20}/>
-                          </Button>
-                          <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-primary/20">
-                              <MoreVertical size={20}/>
-                          </Button>
-                       </div>
-                    ) : (
-                      <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-primary/20">
-                        <MoreVertical size={20} />
-                      </Button>
-                    )}
-                  </td>
+              {isLoading ? (
+                <TableRow>
+                    <TableCell colSpan={6} className="h-96 text-center">
+                        <div className="flex items-center justify-center gap-2 text-text-secondary">
+                           <Loader2 className="animate-spin" size={20}/>
+                           <span>Loading files...</span>
+                        </div>
+                    </TableCell>
                 </TableRow>
-              ))}
+              ) : files.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={6} className="h-96 text-center text-text-secondary">
+                        This directory is empty.
+                    </TableCell>
+                </TableRow>
+              ) : (
+                files.map((file) => (
+                  <TableRow key={file.name} data-state={file.selected ? 'selected' : ''}>
+                    <TableCell className="text-center">
+                      <Checkbox 
+                          checked={file.selected}
+                          onCheckedChange={(checked) => handleSelect(file.name, Boolean(checked))}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {getFileIcon(file)}
+                        <div className="flex flex-col">
+                          <span 
+                            className={`font-medium text-white ${file.isDirectory ? 'cursor-pointer hover:underline' : ''}`}
+                            onClick={file.isDirectory ? () => handleFolderClick(file.name) : undefined}
+                          >
+                            {file.name}
+                          </span>
+                          <span className="sm:hidden text-xs text-text-secondary">{formatSize(file.size)} • {`${file.day} ${file.month}`}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <td className="px-4 py-3 text-text-secondary hidden sm:table-cell">{file.isDirectory ? '—' : formatSize(file.size)}</td>
+                    <td className="px-4 py-3 text-gray-500 font-mono text-xs hidden md:table-cell">{file.permissions}</td>
+                    <td className="px-4 py-3 text-text-secondary hidden lg:table-cell">{`${file.day} ${file.month} ${file.time}`}</td>
+                    <td className="px-4 py-3 text-right">
+                        <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-primary/20">
+                          <MoreVertical size={20} />
+                        </Button>
+                    </td>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
 
@@ -321,7 +373,6 @@ export default function FileManagerPage({ params }: { params: { id: string }}) {
                 </button>
              </div>
           )}
-
         </div>
       </main>
     </div>

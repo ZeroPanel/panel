@@ -30,13 +30,6 @@ export function ServerSidebar({ serverId }: { serverId: string }) {
     const pathname = usePathname();
     const serverName = serverId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     
-    const isFilesPage = pathname.includes('/files');
-
-    // Do not render the sidebar on the files page
-    if (isFilesPage) {
-        return null;
-    }
-
     return (
         <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark">
             <div className="flex flex-col h-full p-4">
