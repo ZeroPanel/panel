@@ -102,7 +102,7 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
   const [nodeIp, setNodeIp] = useState<string | null>(null);
   
   const [files, setFiles] = useState<FileItem[]>([]);
-  const [currentPath, setCurrentPath] = useState('/');
+  const [currentPath, setCurrentPath] = useState('/nebula-data');
   const [isLoading, setIsLoading] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
