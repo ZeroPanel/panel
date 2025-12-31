@@ -29,6 +29,7 @@ import {
   File as FileIcon,
   FilePlus,
   Folder as FolderIcon,
+  FolderPlus,
   Home,
   List,
   Grid,
