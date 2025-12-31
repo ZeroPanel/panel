@@ -26,7 +26,7 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   const converter = useRef(new AnsiToHtml({
       fg: '#FFF',
       bg: 'transparent',
-      newline: true, // Use true to handle newlines properly
+      newline: true,
       escapeXML: true,
       stream: true,
       colors: {
@@ -38,9 +38,8 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) {
-      const isScrolledToBottom = viewport.scrollHeight - viewport.clientHeight <= viewport.scrollTop + 50; // A bit of tolerance
+      const isScrolledToBottom = viewport.scrollHeight - viewport.clientHeight <= viewport.scrollTop + 50;
       if (isScrolledToBottom) {
-        // Use requestAnimationFrame to wait for the DOM to update with the new log
         requestAnimationFrame(() => {
           viewport.scrollTop = viewport.scrollHeight;
         });
@@ -62,34 +61,35 @@ export function CustomTerminalView({ logs, onCommand }: CustomTerminalViewProps)
   }
 
   const renderLogLines = () => {
-    let combinedHtml = '';
-    
-    // Create a new converter instance for each render to avoid state issues if logs are reset
-    const localConverter = new AnsiToHtml({ ...converter.current.options });
+    const localConverter = converter.current;
+    let htmlOutput = '';
 
     logs.forEach((log) => {
-      let lineHtml = '';
       const escapedContent = log.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-      if (log.type === 'input') {
-        lineHtml = `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${escapedContent}</span></div>`;
-      } else if (log.type === 'system') {
-        const style = log.error ? 'color: #f43f5e;' : 'color: #22d3ee;';
-        lineHtml = `<p style="${style}">[System] ${escapedContent}</p>`;
-      } else { // 'log' or 'output'
-        const isError = log.error || log.content.toLowerCase().includes('error');
-        const colorClass = isError ? 'text-rose-400' : 'text-text-secondary';
-        lineHtml = `<div class="${colorClass}">${localConverter.toHtml(log.content)}</div>`;
+      
+      switch (log.type) {
+        case 'input':
+          htmlOutput += `<div class="flex gap-2"><span class="text-emerald-400">$</span><span class="flex-1">${escapedContent}</span></div>`;
+          break;
+        case 'system':
+          const style = log.error ? 'color: #f43f5e;' : 'color: #22d3ee;';
+          htmlOutput += `<p style="${style}">[System] ${escapedContent}</p>`;
+          break;
+        case 'log':
+        case 'output':
+          const coloredContent = localConverter.toHtml(log.content);
+          htmlOutput += `<div>${coloredContent}</div>`;
+          break;
       }
-      combinedHtml += lineHtml;
     });
 
-    return <div className="flex flex-col" dangerouslySetInnerHTML={{ __html: combinedHtml }} />;
+    return <div className="flex flex-col gap-0" dangerouslySetInnerHTML={{ __html: htmlOutput }} />;
   };
+
 
   return (
     <div className="flex flex-col flex-1 min-h-0 p-4 pt-0">
-        <ScrollArea className="flex-1 bg-background-dark/50 rounded-t-lg font-code text-sm leading-relaxed" viewportRef={viewportRef}>
+        <ScrollArea className="flex-1 bg-background-dark/50 rounded-t-lg font-code text-sm" viewportRef={viewportRef}>
              <div className="p-4 whitespace-pre-wrap">
                 {renderLogLines()}
             </div>
