@@ -40,7 +40,7 @@ import {
   X,
   Loader2
 } from 'lucide-react';
-import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 type Container = {
   id: string;
@@ -96,6 +96,7 @@ const formatSize = (bytes: number) => {
 
 export default function FileManagerPage({ params }: { params: { id: string } }) {
   const firestore = useFirestore();
+  const { toast } = useToast();
   const containerDocId = params.id;
 
   const [container, setContainer] = useState<Container | null>(null);
@@ -149,6 +150,18 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
     }
   }, []);
 
+  const sendWsMessage = useCallback((message: object) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(message));
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Connection Error',
+        description: 'WebSocket is not connected.',
+      });
+    }
+  }, [toast]);
+  
   useEffect(() => {
     if (!nodeIp || !container?.containerId) return;
 
@@ -163,7 +176,8 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === 'file_list') {
+        switch (data.type) {
+          case 'file_list':
             if (data.success) {
                 const sortedFiles = data.files.sort((a: FileItem, b: FileItem) => {
                     if (a.isDirectory !== b.isDirectory) {
@@ -174,9 +188,20 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
                 setFiles(sortedFiles);
                 setCurrentPath(data.path);
             } else {
-                console.error('Error listing files:', data.error);
+                toast({ variant: 'destructive', title: 'Error Listing Files', description: data.error });
             }
             setIsLoading(false);
+            break;
+          case 'file_create_result':
+          case 'folder_create_result':
+          case 'delete_result':
+              if (data.success) {
+                  toast({ title: 'Success', description: `Operation on ${data.filePath || data.folderPath || data.itemPath} was successful.`});
+                  listFiles(currentPath); // Refresh file list
+              } else {
+                  toast({ variant: 'destructive', title: 'Operation Failed', description: data.error });
+              }
+              break;
         }
     };
 
@@ -187,13 +212,14 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
 
     ws.onerror = (error) => {
         console.error('File manager WebSocket error:', error);
+        toast({ variant: 'destructive', title: 'WebSocket Error', description: 'Connection to the file manager failed.'});
         setIsLoading(false);
     };
 
     return () => {
         ws.close();
     };
-  }, [nodeIp, container?.containerId, listFiles, currentPath]);
+  }, [nodeIp, container?.containerId, currentPath, listFiles, toast]);
 
   const handleSelectAll = (checked: boolean) => {
     setFiles(files.map((file) => ({ ...file, selected: checked })));
@@ -204,7 +230,7 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
   };
   
   const handlePathChange = (path: string) => {
-    listFiles(path);
+    setCurrentPath(path);
   }
 
   const handleFolderClick = (folderName: string) => {
@@ -218,6 +244,43 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
     handlePathChange(newPath);
   };
 
+  const handleCreateFile = () => {
+    const fileName = prompt('Enter new file name:');
+    if (fileName) {
+      sendWsMessage({
+        type: 'create_file',
+        filePath: `${currentPath}/${fileName}`
+      });
+    }
+  };
+
+  const handleCreateFolder = () => {
+    const folderName = prompt('Enter new folder name:');
+    if (folderName) {
+      sendWsMessage({
+        type: 'create_folder',
+        folderPath: `${currentPath}/${folderName}`
+      });
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    const selected = files.filter(f => f.selected);
+    if (selected.length === 0) return;
+
+    if (window.confirm(`Are you sure you want to delete ${selected.length} item(s)?`)) {
+      selected.forEach(item => {
+        sendWsMessage({
+          type: 'delete_item',
+          itemPath: `${currentPath}/${item.name}`,
+          isFolder: item.isDirectory
+        });
+      });
+      // After sending all delete requests, unselect all
+      handleSelectAll(false);
+    }
+  };
+
   const selectedFiles = files.filter((file) => file.selected);
   const isAllSelected = files.length > 0 && selectedFiles.length === files.length;
   
@@ -226,12 +289,9 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="flex h-full">
-      {/* This aside is part of a different story. Keeping it hidden for now. */}
-      {/* <aside className="w-64 bg-background-dark border-r border-border-dark flex-col hidden lg:flex">...</aside> */}
-
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         <div className="flex flex-col border-b border-border-dark bg-background-dark z-10 shrink-0">
-          <div className="flex items-center px-4 md:px-6 py-3 gap-2 text-sm overflow-x-auto">
+          <div className="flex items-center px-4 md:px-6 py-3 gap-2 text-sm overflow-x-auto no-scrollbar">
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -262,15 +322,15 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
                 Upload
               </Button>
               <div className="h-6 w-px bg-border-dark mx-1" />
-              <Button variant="ghost" size="icon" className="text-gray-300 hover:bg-card-dark"><FolderPlus size={22} /></Button>
-              <Button variant="ghost" size="icon" className="text-gray-300 hover:bg-card-dark"><FilePlus size={22} /></Button>
+              <Button variant="ghost" size="icon" className="text-gray-300 hover:bg-card-dark" onClick={handleCreateFolder}><FolderPlus size={22} /></Button>
+              <Button variant="ghost" size="icon" className="text-gray-300 hover:bg-card-dark" onClick={handleCreateFile}><FilePlus size={22} /></Button>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <Input
                   className="w-full bg-card-dark border border-border-dark rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-1 focus:ring-primary placeholder-gray-500"
-                  placeholder={`Search in ${currentPath}...`}
+                  placeholder={`Search in /${pathSegments[pathSegments.length-1] || 'root'}...`}
                 />
               </div>
               <div className="hidden sm:flex bg-card-dark p-1 rounded-lg border border-border-dark">
@@ -364,7 +424,7 @@ export default function FileManagerPage({ params }: { params: { id: string } }) 
                         <Move size={20} className="text-text-secondary group-hover:text-white transition-colors" />
                         <span className="text-[10px] text-text-secondary group-hover:text-white transition-colors">Move</span>
                     </button>
-                    <button className="flex flex-col items-center gap-1 group">
+                    <button className="flex flex-col items-center gap-1 group" onClick={handleDeleteSelected}>
                         <Trash2 size={20} className="text-text-secondary group-hover:text-red-400 transition-colors" />
                         <span className="text-[10px] text-text-secondary group-hover:text-red-400 transition-colors">Delete</span>
                     </button>
