@@ -11,7 +11,7 @@ import { useAppState } from '@/components/app-state-provider';
 
 type ServerStatus = "Running" | "Stopped" | "Building";
 
-interface Server {
+export interface Server {
     id: string;
     name: string;
     ip: string;
@@ -24,6 +24,8 @@ interface Server {
     ramCurrent: number;
     diskMax: number;
     diskCurrent: number;
+    nodeId: string;
+    containerId?: string;
 }
 
 const filters = ["All Servers", "Running", "Stopped", "Starting"];
@@ -48,6 +50,8 @@ function transformFirestoreData(doc: DocumentData): Server {
     ramCurrent: data.ramUsage / 1024 || 0, // Convert MB to GB
     diskMax: 0, // Placeholder
     diskCurrent: 0, // Placeholder
+    nodeId: data.node || '',
+    containerId: data.containerId || '',
   };
 }
 

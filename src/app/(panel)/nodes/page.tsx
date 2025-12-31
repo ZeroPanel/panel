@@ -243,6 +243,9 @@ const NodeDataRow = React.memo(({ node }: { node: Node }) => {
                                 unit: 'GB',
                             } : prev.disk,
                         }));
+                    } else if (data.type === 'maintenance_update') {
+                        const newStatus = data.maintenance?.enabled ? 'Maint.' : 'Online';
+                        setStatus(newStatus);
                     }
                 } catch (e) {
                     console.error("Failed to parse health check response", e);

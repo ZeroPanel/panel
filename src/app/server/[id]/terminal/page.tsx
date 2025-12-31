@@ -1,18 +1,6 @@
 
 'use client';
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
-import { Button } from '@/components/ui/button';
-import {
-  Play,
-  RefreshCw,
-  StopCircle,
   Cpu,
   Clock,
   MemoryStick,
@@ -51,7 +39,7 @@ const statusStyles: Record<ContainerStatus, {
     Building: { dot: "bg-amber-500", text: "text-amber-400" },
 };
 
-const ConsolePage = ({ params }: { params: { id: string } }) => {
+const TerminalPage = ({ params }: { params: { id: string } }) => {
   const { isFirebaseEnabled } = useAppState();
   const firestore = useFirestore();
   const containerId = params.id;
@@ -200,87 +188,51 @@ const ConsolePage = ({ params }: { params: { id: string } }) => {
     }
   };
 
-  const handleControlClick = (action: 'start' | 'stop' | 'restart') => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ event: action }));
-        if (action === 'start' || action === 'restart') {
-            setCurrentStatus('Starting');
-        }
-    } else {
-        setLogs(prev => [...prev, { type: 'system', content: 'Cannot send control action. WebSocket not connected.', error: true }]);
-    }
-  };
-
   const statusConfig = statusStyles[currentStatus];
 
   if(containerLoading) {
-      return <div>Loading...</div>
+      return (
+        <div className="flex h-screen w-full items-center justify-center bg-background-dark text-white">
+          Loading Terminal...
+        </div>
+      );
   }
   
   if(containerError) {
-      return <div>Error: {containerError.message}</div>
+      return (
+        <div className="flex h-screen w-full items-center justify-center bg-background-dark text-rose-400">
+            Error: {containerError.message}
+        </div>
+      );
   }
 
   return (
-    <div className="flex flex-col h-full gap-8">
-      {/* Header */}
-      <div>
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink asChild>
-                <Link href="/my-servers">My Servers</Link>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{container?.name || 'Console'}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4">
-          <div className="flex items-center gap-3">
-            <div className={cn('size-3 rounded-full', statusConfig.dot)}></div>
-            <h1 className={cn('text-2xl font-bold text-white', statusConfig.text)}>{currentStatus}</h1>
-            <div className="hidden sm:flex items-center gap-6 text-sm text-text-secondary pl-6 border-l border-border-dark ml-3">
-              <div className="flex items-center gap-2"><Cpu size={16}/> {cpuLoad.toFixed(0)}%</div>
-              <div className="flex items-center gap-2"><MemoryStick size={16}/> {ramUsage.current.toFixed(0)} / {ramUsage.max.toFixed(0)} MB</div>
-              <div className="flex items-center gap-2"><Clock size={16}/> Uptime: {uptime}</div>
+    <div className="flex flex-col h-screen w-full p-4 gap-4 bg-background-dark">
+        <header className="flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+                <div className={cn('size-3 rounded-full', statusConfig.dot)}></div>
+                <h1 className={cn('text-lg font-bold text-white', statusConfig.text)}>{container?.name}: {currentStatus}</h1>
+                <div className="hidden sm:flex items-center gap-4 text-sm text-text-secondary pl-4 border-l border-border-dark ml-1">
+                    <div className="flex items-center gap-2"><Cpu size={16}/> {cpuLoad.toFixed(0)}%</div>
+                    <div className="flex items-center gap-2"><MemoryStick size={16}/> {ramUsage.current.toFixed(0)} / {ramUsage.max.toFixed(0)} MB</div>
+                    <div className="flex items-center gap-2"><Clock size={16}/> Uptime: {uptime}</div>
+                </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {(connectionState === 'Disconnected' || connectionState === 'Error') && (
-              <Button variant="outline" onClick={connect}>
-                <Unplug className="mr-2" size={18} />
-                Reconnect
-              </Button>
-            )}
-            <Button variant="ghost" className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10" onClick={() => handleControlClick('start')} disabled={currentStatus === 'Running' || currentStatus === 'Starting'}>
-              <Play size={18} /> Start
-            </Button>
-            <Button variant="ghost" className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10" onClick={() => handleControlClick('restart')} disabled={currentStatus !== 'Running'}>
-              <RefreshCw size={18} /> Restart
-            </Button>
-            <Button variant="ghost" className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleControlClick('stop')} disabled={currentStatus !== 'Running'}>
-              <StopCircle size={18} /> Stop
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Terminal View */}
-      <div className='bg-card-dark border border-border-dark rounded-xl flex flex-col flex-1 min-h-0'>
-         <div className='flex items-center p-3 border-b border-border-dark shrink-0'>
-            <Terminal className='text-primary size-5 mr-3'/>
-            <p className='font-bold text-white'>Console</p>
-            <Link href={`/server/${params.id}/terminal`} className="ml-auto text-xs flex items-center gap-1.5 text-text-secondary hover:text-white">
-                Fullscreen <ExternalLink size={14} />
+            <Link href={`/server/${params.id}/console`} className="text-text-secondary hover:text-white flex items-center gap-2 text-sm">
+                Exit Fullscreen
+                <ExternalLink size={16} />
             </Link>
-         </div>
-         <CustomTerminalView logs={logs} onCommand={handleSendCommand} />
-      </div>
+        </header>
+
+        <div className='bg-card-dark border border-border-dark rounded-xl flex flex-col flex-1 min-h-0'>
+            <div className='flex items-center p-3 border-b border-border-dark shrink-0'>
+                <Terminal className='text-primary size-5 mr-3'/>
+                <p className='font-bold text-white'>Console</p>
+            </div>
+            <CustomTerminalView logs={logs} onCommand={handleSendCommand} />
+        </div>
     </div>
   );
 };
 
-export default ConsolePage;
+export default TerminalPage;

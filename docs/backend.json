@@ -173,6 +173,10 @@
                     },
                     "required": ["public", "private"]
                 }
+            },
+            "containerId": {
+              "type": "string",
+              "description": "The runtime ID of the container from the node."
             }
         },
         "required": ["name", "image", "status", "node"]
@@ -208,3 +212,5 @@
     }
   }
 }
+
+    
